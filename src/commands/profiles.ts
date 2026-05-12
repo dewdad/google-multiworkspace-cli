@@ -1,161 +1,218 @@
 import { Command } from 'commander';
-import {
-  listProfiles,
-  profileExists,
-  deleteProfile,
-  setDefaultProfile,
-  getDefaultProfile,
-  parseOAuthClientFile,
-  saveProfileConfig,
-  getProfileConfig
-} from '../lib/config.js';
-import { initiateOAuthFlow } from '../lib/auth.js';
+import { addProfile, removeProfile, listAllProfiles, renameProfile, setDefaultProfile } from '../profiles/index.js';
+import { runGwsAuthLogin, runGwsAuthStatus } from '../gws/runner.js';
+import { findGwsBinary } from '../gws/binary.js';
 import { formatOutput } from '../lib/output.js';
-import type { ProfileConfig } from '../types/index.js';
+import { GwcliError } from '../types/index.js';
 
-/**
- * Register all profile management subcommands
- */
 export function registerProfilesCommands(program: Command): void {
   const profiles = program
     .command('profiles')
     .description('Manage authentication profiles');
 
-  // profiles list
+  // ─── profiles list ───────────────────────────────────────────────────────
+
   profiles
     .command('list')
     .description('List all profiles')
-    .action(async () => {
-      try {
-        const allProfiles = listProfiles();
-        const defaultProfile = getDefaultProfile();
+    .option('--format <fmt>', 'Output format: json, table')
+    .action((options) => {
+      const entries = listAllProfiles();
+      const format = options.format ?? program.opts().format ?? 'table';
 
-        if (allProfiles.length === 0) {
-          console.log('No profiles configured.');
-          console.log('Add a profile with: gwcli profiles add <name> --client <path>');
-          return;
-        }
+      if (entries.length === 0) {
+        console.log('No profiles configured.');
+        console.log('Add a profile with: gwcli profiles add <name> --client <path>');
+        return;
+      }
 
-        const profileData = allProfiles.map(name => {
-          const config = getProfileConfig(name);
-          const isDefault = name === defaultProfile;
-
-          return {
-            name: name,
-            email: config?.email || 'N/A',
-            default: isDefault ? 'Yes' : '',
-            created: config?.createdAt ? new Date(config.createdAt).toLocaleDateString() : 'N/A'
-          };
-        });
-
-        const output = formatOutput(profileData, 'table');
-        console.log(output);
-      } catch (error) {
-        console.error('Error listing profiles:', error instanceof Error ? error.message : String(error));
-        process.exit(1);
+      if (format === 'json') {
+        console.log(JSON.stringify(entries, null, 2));
+      } else {
+        const tableData = entries.map(e => ({
+          name: `${e.isDefault ? '* ' : '  '}${e.name}`,
+          email: e.email ?? '(not authenticated)',
+          scopes: e.scopes.join(', '),
+          authenticated: e.authenticated ? 'yes' : 'no',
+        }));
+        console.log(formatOutput(tableData, 'table'));
       }
     });
 
-  // profiles add
+  // ─── profiles add ────────────────────────────────────────────────────────
+
   profiles
     .command('add <name>')
-    .description('Add a new profile by running OAuth flow')
+    .description('Add a new profile')
     .requiredOption('--client <path>', 'Path to OAuth client credentials JSON file')
-    .action(async (name: string, options: { client: string }) => {
+    .option('--scopes <list>', 'Comma-separated service names for scope picker', 'gmail,calendar,drive,docs,sheets,keep,tasks')
+    .option('--display-name <name>', 'Human-friendly display name')
+    .option('--no-auth', 'Skip authentication after creating profile')
+    .action(async (name: string, options) => {
       try {
-        // Validate profile name
-        if (!name || name.trim().length === 0) {
-          throw new Error('Profile name cannot be empty');
-        }
+        // Verify gws is available
+        findGwsBinary();
 
-        // Check if profile already exists
-        if (profileExists(name)) {
-          throw new Error(`Profile "${name}" already exists. Use a different name or remove the existing profile first.`);
-        }
+        const scopes = options.scopes.split(',').map((s: string) => s.trim());
+        addProfile(name, {
+          clientSecretPath: options.client,
+          displayName: options.displayName,
+          scopes,
+        });
 
-        // Parse OAuth client file
-        console.log(`Reading OAuth client credentials from: ${options.client}`);
-        const { clientId, clientSecret } = parseOAuthClientFile(options.client);
+        console.log(`Profile '${name}' created.`);
 
-        // Initiate OAuth flow
-        console.log(`\nInitiating OAuth flow for profile: ${name}`);
-        console.log('A browser window will open for authentication...\n');
-
-        await initiateOAuthFlow(name, clientId, clientSecret);
-
-        // Save profile configuration
-        const profileConfig: ProfileConfig = {
-          createdAt: new Date().toISOString()
-        };
-
-        saveProfileConfig(name, profileConfig);
-
-        console.log(`\n✓ Profile "${name}" added successfully!`);
-
-        // If this is the first profile, set it as default
-        const allProfiles = listProfiles();
-        if (allProfiles.length === 1) {
-          setDefaultProfile(name);
-          console.log(`✓ Set "${name}" as the default profile`);
+        if (options.auth !== false) {
+          console.log('Starting authentication...');
+          const result = runGwsAuthLogin(name, scopes);
+          if (result.exitCode === 0) {
+            console.log(`Profile '${name}' authenticated successfully.`);
+          } else {
+            console.error(`Authentication failed. Run later: gwcli profiles auth ${name}`);
+          }
         } else {
-          console.log(`\nTo set this as the default profile, run:`);
-          console.log(`  gwcli profiles set-default ${name}`);
+          console.log(`Skipping auth. Run later: gwcli profiles auth ${name}`);
         }
-      } catch (error) {
-        console.error('Error adding profile:', error instanceof Error ? error.message : String(error));
+      } catch (err) {
+        if (err instanceof GwcliError) {
+          console.error(`Error: ${err.message}`);
+          if (err.suggestion) console.error(err.suggestion);
+        } else {
+          console.error('Error:', err instanceof Error ? err.message : String(err));
+        }
         process.exit(1);
       }
     });
 
-  // profiles remove
+  // ─── profiles remove ─────────────────────────────────────────────────────
+
   profiles
     .command('remove <name>')
-    .description('Delete a profile')
-    .action(async (name: string) => {
+    .description('Remove a profile and its credentials')
+    .option('--force', 'Skip confirmation')
+    .action((name: string, options) => {
       try {
-        if (!profileExists(name)) {
-          throw new Error(`Profile "${name}" does not exist`);
+        if (!options.force) {
+          console.error(`This will permanently delete profile '${name}' and its credentials.`);
+          console.error(`Re-run with --force to confirm: gwcli profiles remove ${name} --force`);
+          process.exit(1);
         }
 
-        const defaultProfile = getDefaultProfile();
-        const wasDefault = defaultProfile === name;
-
-        const success = deleteProfile(name);
-
-        if (!success) {
-          throw new Error(`Failed to delete profile "${name}"`);
+        removeProfile(name);
+        console.log(`Profile '${name}' removed.`);
+      } catch (err) {
+        if (err instanceof GwcliError) {
+          console.error(`Error: ${err.message}`);
+          if (err.suggestion) console.error(err.suggestion);
+        } else {
+          console.error('Error:', err instanceof Error ? err.message : String(err));
         }
-
-        console.log(`✓ Profile "${name}" removed successfully`);
-
-        if (wasDefault) {
-          const remainingProfiles = listProfiles();
-          if (remainingProfiles.length > 0) {
-            console.log(`\nNote: "${name}" was the default profile.`);
-            console.log('Set a new default with:');
-            console.log(`  gwcli profiles set-default ${remainingProfiles[0]}`);
-          }
-        }
-      } catch (error) {
-        console.error('Error removing profile:', error instanceof Error ? error.message : String(error));
         process.exit(1);
       }
     });
 
-  // profiles set-default
+  // ─── profiles rename ─────────────────────────────────────────────────────
+
+  profiles
+    .command('rename <old> <new>')
+    .description('Rename a profile')
+    .action((oldName: string, newName: string) => {
+      try {
+        renameProfile(oldName, newName);
+        console.log(`Profile renamed: '${oldName}' → '${newName}'`);
+      } catch (err) {
+        if (err instanceof GwcliError) {
+          console.error(`Error: ${err.message}`);
+          if (err.suggestion) console.error(err.suggestion);
+        } else {
+          console.error('Error:', err instanceof Error ? err.message : String(err));
+        }
+        process.exit(1);
+      }
+    });
+
+  // ─── profiles set-default ────────────────────────────────────────────────
+
   profiles
     .command('set-default <name>')
     .description('Set the default profile')
-    .action(async (name: string) => {
+    .action((name: string) => {
       try {
-        if (!profileExists(name)) {
-          throw new Error(`Profile "${name}" does not exist`);
-        }
-
         setDefaultProfile(name);
-        console.log(`✓ Default profile set to: ${name}`);
-      } catch (error) {
-        console.error('Error setting default profile:', error instanceof Error ? error.message : String(error));
+        console.log(`Default profile set to '${name}'.`);
+      } catch (err) {
+        if (err instanceof GwcliError) {
+          console.error(`Error: ${err.message}`);
+          if (err.suggestion) console.error(err.suggestion);
+        } else {
+          console.error('Error:', err instanceof Error ? err.message : String(err));
+        }
+        process.exit(1);
+      }
+    });
+
+  // ─── profiles auth ───────────────────────────────────────────────────────
+
+  profiles
+    .command('auth <name>')
+    .description('(Re-)authenticate a profile')
+    .option('--scopes <list>', 'Comma-separated service names')
+    .action((name: string, options) => {
+      try {
+        findGwsBinary();
+        const scopes = options.scopes?.split(',').map((s: string) => s.trim());
+        console.log(`Authenticating profile '${name}'...`);
+        const result = runGwsAuthLogin(name, scopes);
+        if (result.exitCode === 0) {
+          console.log(`Profile '${name}' authenticated successfully.`);
+        } else {
+          console.error(`Authentication failed (exit code: ${result.exitCode}).`);
+          process.exit(result.exitCode);
+        }
+      } catch (err) {
+        if (err instanceof GwcliError) {
+          console.error(`Error: ${err.message}`);
+          if (err.suggestion) console.error(err.suggestion);
+        } else {
+          console.error('Error:', err instanceof Error ? err.message : String(err));
+        }
+        process.exit(1);
+      }
+    });
+
+  // ─── profiles status ─────────────────────────────────────────────────────
+
+  profiles
+    .command('status [name]')
+    .description('Check auth status of a profile')
+    .action((name?: string) => {
+      try {
+        findGwsBinary();
+
+        if (name) {
+          const { exitCode, status } = runGwsAuthStatus(name);
+          if (status) {
+            console.log(JSON.stringify(status, null, 2));
+          }
+          if (exitCode !== 0) {
+            process.exit(exitCode);
+          }
+        } else {
+          // Show status for all profiles
+          const entries = listAllProfiles();
+          for (const entry of entries) {
+            const marker = entry.isDefault ? '*' : ' ';
+            const authStatus = entry.authenticated ? '✓' : '✗';
+            console.log(`${marker} ${authStatus} ${entry.name.padEnd(20)} ${entry.email ?? '(no email)'}`);
+          }
+        }
+      } catch (err) {
+        if (err instanceof GwcliError) {
+          console.error(`Error: ${err.message}`);
+          if (err.suggestion) console.error(err.suggestion);
+        } else {
+          console.error('Error:', err instanceof Error ? err.message : String(err));
+        }
         process.exit(1);
       }
     });

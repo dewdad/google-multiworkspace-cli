@@ -1,7 +1,7 @@
 {
   "name": "google-workspace-cli",
-  "version": "0.1.0",
-  "description": "Google Workspace CLI with multi-profile support for Gmail, Calendar, and Drive",
+  "version": "2.0.0",
+  "description": "Multi-profile Google Workspace CLI — orchestration layer over gws",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -18,20 +18,23 @@
   },
   "keywords": [
     "google",
+    "workspace",
+    "cli",
+    "multi-profile",
+    "gws",
     "gmail",
     "calendar",
     "drive",
-    "cli",
-    "workspace"
+    "keep",
+    "docs",
+    "sheets"
   ],
   "author": "Ian Hines",
   "license": "MIT",
   "dependencies": {
     "chalk": "^5.3.0",
     "cli-table3": "^0.6.5",
-    "commander": "^12.1.0",
-    "googleapis": "^144.0.0",
-    "open": "^10.1.0"
+    "commander": "^12.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

@@ -1,94 +1,78 @@
-export interface GwcliConfig {
-  defaultProfile?: string;
-  version: string;
+// ─── Global Config ───────────────────────────────────────────────────────────
+
+export interface GlobalConfig {
+  version: 1;
+  defaultProfile: string | null;
+  gwsBinary: string;
+  settings: {
+    defaultFormat: OutputFormat;
+    annotateProfile: boolean;
+  };
 }
 
-export interface ProfileConfig {
-  email?: string;
+// ─── Profile Metadata ────────────────────────────────────────────────────────
+
+export interface ProfileMeta {
+  name: string;
+  displayName: string;
+  email: string | null;
   createdAt: string;
+  lastUsed: string | null;
+  scopes: string[];
+  clientSecretSource: string;
+  tags: string[];
 }
 
-export interface OAuthCredentials {
-  installed?: {
-    client_id: string;
-    client_secret: string;
-    redirect_uris: string[];
-  };
-  web?: {
-    client_id: string;
-    client_secret: string;
-    redirect_uris: string[];
-  };
-}
+// ─── CLI Types ───────────────────────────────────────────────────────────────
 
-export interface TokenData {
-  access_token: string;
-  refresh_token: string;
-  scope: string;
-  token_type: string;
-  expiry_date: number;
-}
-
-export interface ProfileCredentials {
-  clientId: string;
-  clientSecret: string;
-  tokens: TokenData;
-}
-
-export type OutputFormat = 'json' | 'table' | 'text';
+export type OutputFormat = 'json' | 'table' | 'yaml' | 'csv';
 
 export interface GlobalOptions {
   profile?: string;
   format?: OutputFormat;
+  verbose?: boolean;
+  dryRun?: boolean;
 }
 
-export interface EmailMessage {
-  id: string;
-  threadId: string;
-  subject: string;
-  from: string;
-  to: string;
-  date: string;
-  snippet: string;
-  labels: string[];
-  isUnread: boolean;
+// ─── GWS Runner Types ────────────────────────────────────────────────────────
+
+export interface GwsRunResult {
+  exitCode: number;
+  stdout?: string;
+  stderr?: string;
 }
 
-export interface EmailDetail extends EmailMessage {
-  body: string;
-  attachments: {
-    filename: string;
-    mimeType: string;
-    size: number;
-  }[];
+export interface GwsBinaryInfo {
+  path: string;
+  version: string;
 }
 
-export interface CalendarEvent {
-  id: string;
-  calendarId: string;
-  summary: string;
-  description?: string;
-  start: string;
-  end: string;
-  location?: string;
-  attendees?: string[];
-  status: string;
-}
+// ─── Profile Resolution ──────────────────────────────────────────────────────
 
-export interface Calendar {
-  id: string;
-  summary: string;
-  description?: string;
-  primary: boolean;
-  accessRole: string;
-}
-
-export interface DriveFile {
-  id: string;
+export interface ResolvedProfile {
   name: string;
-  mimeType: string;
-  size?: string;
-  modifiedTime: string;
-  parents?: string[];
-  webViewLink?: string;
+  gwsConfigDir: string;
+  meta: ProfileMeta;
+}
+
+// ─── Error Types ─────────────────────────────────────────────────────────────
+
+export class GwcliError extends Error {
+  constructor(
+    message: string,
+    public readonly code: string,
+    public readonly suggestion?: string
+  ) {
+    super(message);
+    this.name = 'GwcliError';
+  }
+}
+
+// ─── Doctor Types ────────────────────────────────────────────────────────────
+
+export interface DoctorCheck {
+  name: string;
+  status: 'ok' | 'warn' | 'error';
+  message: string;
+  suggestion?: string;
 }

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "engram": {
+      "command": "npx",
+      "args": ["-y", "engramx", "serve", "C:\\Users\\avita_n145\\copilot-projects\\google-multiworkspace-cli"]
+    }
+  }
+}

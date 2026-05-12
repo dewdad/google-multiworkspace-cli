@@ -1,0 +1,118 @@
+/**
+ * Backward-compatibility translation layer.
+ *
+ * Translates old gwcli v1 command syntax to equivalent gws commands.
+ * Logs a deprecation warning when a translation is applied.
+ *
+ * Remove after 3 months or in v3.0.
+ */
+
+interface Translation {
+  /** gws args to use instead */
+  translate: (args: string[]) => string[];
+  /** Deprecation message */
+  newSyntax: string;
+}
+
+function extractFlag(args: string[], flag: string): string | undefined {
+  const idx = args.indexOf(flag);
+  if (idx === -1 || idx + 1 >= args.length) return undefined;
+  return args[idx + 1];
+}
+
+function hasFlag(args: string[], flag: string): boolean {
+  return args.includes(flag);
+}
+
+const TRANSLATIONS: Record<string, Translation> = {
+  'gmail list': {
+    translate: (args) => {
+      const limit = extractFlag(args, '--limit') ?? '20';
+      const q = hasFlag(args, '--unread') ? 'is:unread' : '';
+      const params: Record<string, unknown> = { userId: 'me', maxResults: Number(limit) };
+      if (q) params['q'] = q;
+      return [
+        'gmail', 'users', 'messages', 'list',
+        '--params', JSON.stringify(params),
+        '--fields', 'messages(id,threadId,snippet,labelIds,internalDate)',
+      ];
+    },
+    newSyntax: "gwcli gmail users messages list --params '{\"userId\":\"me\"}'",
+  },
+
+  'gmail read': {
+    translate: (args) => {
+      const id = args.find(a => !a.startsWith('-'));
+      const params: Record<string, unknown> = { userId: 'me', id: id ?? '' };
+      return [
+        'gmail', 'users', 'messages', 'get',
+        '--params', JSON.stringify(params),
+      ];
+    },
+    newSyntax: "gwcli gmail users messages get --params '{\"userId\":\"me\",\"id\":\"<id>\"}'",
+  },
+
+  'calendar events': {
+    translate: (args) => {
+      const days = extractFlag(args, '--days') ?? '7';
+      return ['calendar', '+agenda', '--days', days];
+    },
+    newSyntax: 'gwcli calendar +agenda --days 7',
+  },
+
+  'calendar list': {
+    translate: () => {
+      return ['calendar', 'calendarList', 'list', '--params', '{}'];
+    },
+    newSyntax: "gwcli calendar calendarList list --params '{}'",
+  },
+
+  'drive list': {
+    translate: (args) => {
+      const limit = extractFlag(args, '--limit') ?? '20';
+      return [
+        'drive', 'files', 'list',
+        '--params', JSON.stringify({ pageSize: Number(limit) }),
+        '--fields', 'files(id,name,mimeType,modifiedTime)',
+      ];
+    },
+    newSyntax: "gwcli drive files list --params '{\"pageSize\":20}'",
+  },
+
+  'drive search': {
+    translate: (args) => {
+      const query = args.find(a => !a.startsWith('-')) ?? '';
+      return [
+        'drive', 'files', 'list',
+        '--params', JSON.stringify({ q: `name contains '${query}'`, pageSize: 20 }),
+        '--fields', 'files(id,name,mimeType,modifiedTime)',
+      ];
+    },
+    newSyntax: "gwcli drive files list --params '{\"q\":\"name contains 'term'\"}'",
+  },
+};
+
+/**
+ * Check if args match a deprecated v1 command pattern and translate if so.
+ * Returns null if no translation applies (pass through to gws as-is).
+ */
+export function tryTranslateCompat(gwsArgs: string[]): string[] | null {
+  if (gwsArgs.length < 2) return null;
+
+  const key = `${gwsArgs[0]} ${gwsArgs[1]}`;
+  const translation = TRANSLATIONS[key];
+
+  if (!translation) return null;
+
+  // Remaining args after the two-word command
+  const remainingArgs = gwsArgs.slice(2);
+  const translated = translation.translate(remainingArgs);
+
+  // Emit deprecation warning
+  process.stderr.write(
+    `⚠ Deprecated syntax: 'gwcli ${key}' → use native gws syntax.\n` +
+    `  New: ${translation.newSyntax}\n\n`
+  );
+
+  return translated;
+}
