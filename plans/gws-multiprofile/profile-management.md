@@ -10,16 +10,13 @@
     │   ├── meta.json                     ← profile metadata
     │   └── gws/                          ← complete gws config directory (isolated)
     │       ├── client_secret.json        ← OAuth client credentials
-    │       ├── credentials.enc           ← encrypted OAuth tokens (gws-managed)
-    │       ├── .encryption_key           ← AES-256-GCM key (gws-managed)
-    │       └── token_cache.json          ← token refresh cache (gws-managed)
+    │       ├── credentials.enc           ← encrypted OAuth tokens (gws-managed, if used by pinned gws)
+    │       ├── .encryption_key           ← key material (gws-managed, if file backend is used)
+    │       └── token_cache.json          ← token refresh cache (gws-managed, if used by pinned gws)
     ├── work/
     │   ├── meta.json
     │   └── gws/
-    │       ├── client_secret.json
-    │       ├── credentials.enc
-    │       ├── .encryption_key
-    │       └── token_cache.json
+    │       └── ...                         ← same gws-managed artifact layout confirmed in Phase 0
     └── client-acme/
         ├── meta.json
         └── gws/
@@ -74,7 +71,7 @@ interface ProfileMeta {
   email: string | null;         // discovered after auth, null before
   createdAt: string;            // ISO 8601
   lastUsed: string | null;      // ISO 8601, updated on each command
-  scopes: string[];             // scope prefixes passed to gws auth login
+  scopes: string[];             // scope prefixes passed to gws auth command, based on Phase 0 verification
   clientSecretSource: string;   // original path of client_secret.json (for reference)
   tags: string[];               // user-defined tags for grouping
 }
@@ -117,7 +114,7 @@ const PROFILE_NAME_REGEX = /^[a-z][a-z0-9\-]{0,62}$/;
 3. Create directory: `<config_root>/profiles/<name>/gws/`
 4. Copy (not move) client_secret.json into the gws dir
 5. Write initial meta.json (email=null, scopes from --scopes or default set)
-6. Run scoped auth login:
+6. Run the scoped auth command verified in Phase 0, usually:
    ```
    GOOGLE_WORKSPACE_CLI_CONFIG_DIR=<profile_gws_dir> gws auth login [-s <scopes>]
    ```
@@ -133,7 +130,7 @@ gmail, calendar, drive, docs, sheets, keep, tasks
 - Profile name already exists → error with `--force` suggestion
 - Client secret file not found → error
 - gws binary not found → error with install instructions
-- Auth login cancelled/failed → profile dir created but meta.email=null, warn user
+- Auth login cancelled/failed → profile dir remains with meta.email=null and authenticated=false; warn user and suggest `gwcli profiles auth <name>`
 
 ### `profiles remove <name> [--force]`
 
@@ -200,6 +197,8 @@ Check auth health without making a full API call:
 - Scopes configured?
 - Last successful API call timestamp?
 
+Do not assume a single credential filename. The health check must use the artifact list captured in Phase 0 for the pinned `gws` version.
+
 ### `profiles export <name> --output <path>`
 
 Export profile config (client_secret.json + meta.json, NOT credentials) for backup or sharing between machines.
@@ -207,6 +206,8 @@ Export profile config (client_secret.json + meta.json, NOT credentials) for back
 ### `profiles import <path> --name <name>`
 
 Import a previously exported profile bundle and run auth login.
+
+Imported bundles never include OAuth tokens. Import copies metadata/client configuration, then runs auth unless `--no-auth` is explicitly supplied.
 
 ## Profile Resolution Priority
 

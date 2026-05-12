@@ -6,18 +6,28 @@ Transform `gwcli` from a standalone Google API client into a multi-profile orche
 
 ## Phases
 
-### Phase 0: Preparation (Before Any Code Changes)
+### Phase 0: External Dependency Validation (Before Any Code Changes)
 
 **Duration:** 1 session
+
+**Hard gate:** Do not start implementation until this phase passes for a pinned `gws` version. If any command or artifact differs, update `auth-integration.md`, `cli-interface.md`, and this migration plan first.
 
 1. **Install and validate gws**
    ```bash
    npm install -g @googleworkspace/cli
    gws --version
-   gws auth login  # verify basic flow works
+   gws auth --help
+   gws --help
    ```
+   Record the exact `gws` version in the implementation PR or release notes.
 
-2. **Verify env var isolation works**
+2. **Verify auth command and scope syntax**
+   ```bash
+   gws auth login --help
+   ```
+   Confirm whether scope prefixes use `-s`, `--scopes`, a setup command, or another current interface.
+
+3. **Verify env var isolation works**
    ```bash
    mkdir -p /tmp/gws-test-profile
    cp ~/.config/gws/client_secret.json /tmp/gws-test-profile/
@@ -26,9 +36,18 @@ Transform `gwcli` from a standalone Google API client into a multi-profile orche
    ```
    If this returns the email without touching `~/.config/gws/`, the hybrid approach is confirmed.
 
-3. **Document current gwcli usage** — capture any scripts/skills that reference current command syntax for backward-compat mapping.
+4. **Capture actual config artifacts**
+   After auth, list the test config directory and record the files `gws` created. The implementation must validate against these observed artifacts instead of assuming only `credentials.enc`.
 
-4. **Tag current state**
+5. **Verify passthrough flags used by gwcli**
+   ```bash
+   GOOGLE_WORKSPACE_CLI_CONFIG_DIR=/tmp/gws-test-profile gws gmail users getProfile --params '{"userId":"me"}' --fields emailAddress --format json
+   ```
+   Confirm `--format`, `--params`, `--fields`, and any planned `--dry-run` behavior before documenting agent examples as supported.
+
+6. **Document current gwcli usage** — capture any scripts/skills that reference current command syntax for backward-compat mapping.
+
+7. **Tag current state**
    ```bash
    git tag v1.0.0-pre-hybrid -m "Last version before gws hybrid migration"
    ```
@@ -39,7 +58,7 @@ Transform `gwcli` from a standalone Google API client into a multi-profile orche
 
 **Duration:** 1-2 sessions
 
-**Goal:** Build the new profile management system alongside the old code. Both work simultaneously.
+**Goal:** Build the new profile management system alongside the old code. Both work simultaneously. This is a backend rewrite: the current repo has basic profile commands, but the existing profile files are plaintext OAuth data and do not match the target per-profile `gws/` config layout.
 
 #### Files to Create
 
@@ -69,8 +88,9 @@ src/
 
 - Unit tests for validator, config, resolver
 - Integration test: create profile dir, verify file layout
-- Integration test: spawn gws with mock config dir (use `gws --help` as a no-op)
-- Contract tests: snapshot expected JSON structure from key `gws` commands (gmail, calendar, drive) to detect upstream output format changes on version bump (see architecture.md § "Upgrade Safety")
+- Mock runner tests: verify env injection, argv preservation, configured binary path, exit-code forwarding, and stderr/stdout handling without requiring real `gws`
+- Optional live smoke test: spawn the pinned `gws` with a temporary config dir only when `GWCLI_LIVE_GWS_TESTS=1`
+- Optional live contract tests: snapshot expected JSON structure from key `gws` commands (gmail, calendar, drive) on version bump only (see architecture.md § "Upgrade Safety")
 
 ---
 
@@ -105,7 +125,9 @@ program.command('profiles').addCommand(add).addCommand(remove)...
 program.command('doctor', 'Check system health')
 program.command('version', 'Show version info')
 
-// Everything else → passthrough to gws
+// Everything else → passthrough to gws.
+// The implementation must preserve unknown gws args and must not let Commander
+// reject passthrough flags.
 program.on('command:*', (args) => {
   const profile = resolveProfile(program.opts());
   const exitCode = execGws(profile, args);
@@ -201,22 +223,32 @@ Remove compat layer after 3 months or v3.0.
 
 **Duration:** Built into Phase 2
 
-Users who already have gwcli profiles (old format) need a migration path.
+Users who already have gwcli profiles (old format) need a migration path. The current v1 profile data stores OAuth client IDs/secrets and tokens in `credentials.json`; it does not store the original downloaded client-secret file path in profile metadata. Therefore v1 migration preserves profile names/defaults automatically, but OAuth credentials are re-established through `gws` unless Phase 0 discovers an official import path.
 
 ```bash
 gwcli migrate
+gwcli migrate --client ~/Downloads/client_secret.json
+gwcli migrate --profile work --client ~/Downloads/work-client-secret.json
 ```
 
 **What it does:**
 1. Reads old config at `~/.config/gwcli/profiles/<name>/credentials.json`
 2. Creates new directory structure: `~/.config/gwcli/profiles/<name>/gws/`
-3. Converts old credentials to gws format (or re-runs auth login)
-4. Preserves profile names and default setting
+3. Preserves profile name, default setting, and non-secret metadata where available
+4. Copies the supplied OAuth client JSON into the new `gws/` directory
+5. Runs the verified `gws` auth flow for that profile, unless `--no-auth` is explicitly supplied
+6. Leaves the old `credentials.json` in place until the user confirms migration worked
+
+**Non-goal:** Direct conversion of old googleapis OAuth tokens into `gws` encrypted credentials. Only implement this if `gws` documents a supported import format.
 
 **Implementation:**
 
 ```typescript
-async function migrateProfile(name: string): Promise<void> {
+async function migrateProfile(
+  name: string,
+  options: { clientSecretPath?: string; noAuth?: boolean }
+): Promise<void> {
+  const { clientSecretPath, noAuth = false } = options;
   const oldDir = path.join(configRoot, 'profiles', name);
   const newGwsDir = path.join(oldDir, 'gws');
 
@@ -228,22 +260,20 @@ async function migrateProfile(name: string): Promise<void> {
 
   mkdirSync(newGwsDir, { recursive: true });
 
-  // Copy client credentials if they exist in old format
+  // Old format has OAuth tokens in credentials.json. Do not attempt direct
+  // conversion into gws encrypted credentials unless gws documents an import API.
   const oldCreds = path.join(oldDir, 'credentials.json');
   if (existsSync(oldCreds)) {
-    // Old format has OAuth tokens in credentials.json
-    // gws needs them in a specific format — safest to re-auth
-    console.log(`Re-authenticating profile '${name}'...`);
-    await authenticateProfile(name, DEFAULT_SCOPES);
+    console.log(`Found legacy credentials for '${name}'. Re-authentication is required.`);
   }
 
-  // Copy client_secret if it exists
-  const oldClient = path.join(oldDir, 'config.json');
-  if (existsSync(oldClient)) {
-    const config = JSON.parse(readFileSync(oldClient, 'utf-8'));
-    if (config.clientSecretPath) {
-      copyFileSync(config.clientSecretPath, path.join(newGwsDir, 'client_secret.json'));
-    }
+  if (!clientSecretPath && !noAuth) {
+    throw new Error(`Migration for '${name}' requires --client <path> or --no-auth`);
+  }
+
+  if (clientSecretPath) {
+    copyFileSync(clientSecretPath, path.join(newGwsDir, 'client_secret.json'));
+    await authenticateProfile(name, DEFAULT_SCOPES);
   }
 
   // Write meta.json
@@ -348,6 +378,6 @@ Before declaring migration complete:
 - [ ] `--format table` works for human-readable output
 - [ ] Old v1 profiles can be migrated with `gwcli migrate`
 - [ ] npm package size < 10MB (no googleapis dependency)
-- [ ] Contract tests pass against installed `gws` version (gmail, calendar, drive JSON shapes)
+- [ ] Normal CI passes without live Google credentials: lint, test, mocked runner tests, build
+- [ ] Optional live contract tests pass against pinned `gws` version (gmail, calendar, drive JSON shapes)
 - [ ] `gwcli doctor --check-contracts` reports all green
-- [ ] CI passes: lint, test (including contract tests), build

@@ -26,7 +26,7 @@ Replace the hand-rolled Google API clients in `gwcli` with a thin multi-account 
 
 **Rationale:**
 1. `gws` exposes `GOOGLE_WORKSPACE_CLI_CONFIG_DIR` env var — per-invocation credential isolation is explicitly supported.
-2. Our multi-profile management (the one thing `gws` lacks) is already implemented and proven.
+2. The existing repo already has the product shape and basic profile commands, but the profile storage/auth layer must be rewritten for isolated `gws` config directories.
 3. Effort collapses from "reimplement every Google API" to "manage config dirs and subprocess calls."
 4. Agent skills from `gws` ecosystem (40+) become available to our agents immediately.
 5. New Google APIs are picked up automatically via Discovery Service — zero maintenance.
@@ -41,27 +41,35 @@ Replace the hand-rolled Google API clients in `gwcli` with a thin multi-account 
 
 | Concern | Resolution |
 |---------|------------|
-| "Half-migrated state" risk | At 3K LOC, full migration is 1-2 sessions. Won't stall mid-way. |
+| "Half-migrated state" risk | Address with a mandatory Phase 0 validation gate and a branch/tag before deleting old code. |
 | "Different product identity" | Name stays. Value prop (multi-profile GWS CLI) stays. Only backend mechanism changes. |
 | "Dead code drag" | `git rm` the 7 deleted files in one commit. Gone. |
 | "Stale lockfile/deps" | One `npm uninstall googleapis && npm install` — trivial. |
 | "Fresh start" psychological boost | Overstated for a solo 5-month project with 6 commits. Boilerplate recreation erases momentum gain. |
 
-**Strongest argument for augmenting:** The profile management system — the one thing `gws` lacks and the entire value of this project — already exists in this repo and works. Starting fresh means copy-pasting it (a "spiritual fork" with extra steps) or rewriting it (pure waste).
+**Strongest argument for augmenting:** The existing repo already has the CLI identity, command organization, tests, package wiring, and basic profile UX. The profile backend still needs a real migration from plaintext `credentials.json` to per-profile `gws/` config directories; this is not a small adapter over the current auth module.
 
 **What "augment" means mechanically:**
 1. Tag current state (`v1.0.0-pre-hybrid`)
-2. Build new modules alongside old code (Phase 1)
-3. `git rm` the 7 replaced files in a single commit (Phase 2)
-4. Result: same repo, same URL, same CI — 55% less code
+2. Complete Phase 0 against a pinned `gws` version before implementation
+3. Build new modules alongside old code (Phase 1)
+4. `git rm` the replaced files only after passthrough, profile add/auth, and migration tests pass
+5. Result: same repo, same URL, same CI — less direct API wrapper code
 
-**Unaddressed risk identified:** `gws` subprocess output format changes are not covered by the plan. Integration tests must pin expected JSON shapes from `gws` commands to catch breaking changes early.
+**External dependency gate:** The plan is valid only after verifying the exact installed `gws` version supports:
+- `GOOGLE_WORKSPACE_CLI_CONFIG_DIR` in release builds
+- `gws auth login` or the current equivalent auth command and scope flag syntax
+- JSON output flags used by gwcli
+- expected config artifacts under the injected config directory
+- documented or observed exit codes for missing credentials and auth failures
+
+If any item differs, update this plan before implementation.
 
 ### Risks Accepted
 
 | Risk | Probability | Impact | Mitigation |
 |------|-------------|--------|------------|
-| `gws` breaking changes (pre-v1.0) | Medium | Medium | Pin binary version, CI test on upgrade |
+| `gws` breaking changes (pre-v1.0) | Medium | Medium | Pin binary version, Phase 0 validation, opt-in live contract tests on upgrade |
 | `gws` project abandoned | Very Low | High | Fork; our profile layer is decoupled |
 | Windows binary issues | Low | Medium | `gws` ships Windows builds; test in CI |
 | Discovery Service latency | Low | Low | `gws` caches locally after first fetch |
@@ -87,10 +95,10 @@ Replace the hand-rolled Google API clients in `gwcli` with a thin multi-account 
 ## Success Criteria
 
 1. `gwcli --profile X <any-gws-command>` works for all 19+ services
-2. Profile setup requires exactly: `gwcli profiles add <name> --client <path>`
-3. Zero code changes needed when Google adds new APIs
-4. Agent JSON output is identical to raw `gws --format json` output
-5. Existing gwcli users can migrate with `gwcli migrate` command
+2. Primary OAuth profile setup path is: `gwcli profiles add <name> --client <path>` followed by the verified `gws` auth flow
+3. Zero gwcli code changes needed when `gws` exposes new APIs through passthrough commands
+4. Agent JSON output is identical to raw `gws --format json` output in default passthrough mode
+5. Existing gwcli users can migrate profile names/defaults and re-authenticate with a clear `gwcli migrate` flow
 
 ## Documents
 

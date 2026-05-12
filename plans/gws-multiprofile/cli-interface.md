@@ -13,7 +13,7 @@ gwcli [global-flags] <command> [args...]
 | `--profile <name>` | `-p` | `GWCLI_PROFILE` | Select profile for this invocation |
 | `--format <fmt>` | `-f` | `GWCLI_FORMAT` | Output format: json, table, yaml, csv |
 | `--verbose` | `-v` | `GWCLI_VERBOSE=1` | Show debug info (profile resolution, gws command) |
-| `--dry-run` | | | Pass --dry-run to gws (no API mutation) |
+| `--dry-run` | | | Pass `--dry-run` to `gws` only if the pinned `gws` version supports it |
 
 ### Command Groups
 
@@ -21,6 +21,7 @@ gwcli [global-flags] <command> [args...]
 gwcli profiles <subcommand>     ← Profile management (gwcli-native)
 gwcli doctor                    ← Health check (gwcli-native)
 gwcli version                   ← Version info (gwcli-native)
+gwcli migrate                   ← v1 profile migration helper (gwcli-native)
 gwcli <anything-else>           ← Passthrough to gws
 ```
 
@@ -61,16 +62,19 @@ GOOGLE_WORKSPACE_CLI_CONFIG_DIR=~/.config/gwcli/profiles/personal/gws/ gws keep 
 
 ### Passthrough Rules
 
-1. **All argv after profile resolution passes through verbatim** — no transformation
-2. **gws flags are gws flags** — gwcli doesn't parse or validate them
-3. **stdout/stderr stream directly** — no buffering (supports large outputs, NDJSON streaming)
-4. **Exit code forwarded** — gwcli exits with gws's exit code
+1. **Native command detection happens first** — `profiles`, `doctor`, `version`, `migrate`, and `completion` are handled by gwcli.
+2. **Only gwcli global flags are parsed by gwcli** — `--profile/-p`, `--format/-f`, `--verbose/-v`, and any future gwcli-only global flags.
+3. **Everything after the passthrough command is preserved** — gws flags are gws flags; gwcli does not parse or validate them.
+4. **Unknown passthrough options must not be rejected by Commander** — implementation must use an argv parser shape that preserves unknown args for `gws`.
+5. **`--` is supported** — `gwcli -p work -- gmail users messages list --params ...` always treats the right side as `gws` args.
+6. **stdout/stderr stream directly by default** — no buffering in passthrough mode, which supports large outputs and NDJSON streaming.
+7. **Exit code forwarded** — gwcli exits with gws's exit code.
 
 ### Format Flag Interaction
 
 If `--format` is specified on gwcli:
-- It's translated to gws's `--format` flag and appended to the gws args
-- If the user also specifies `--format` in the passthrough args, that takes precedence (last wins in gws)
+- It is translated to gws's `--format` flag and appended to the gws args only when the passthrough args do not already contain `--format` or `-f`.
+- If the user specifies `--format` in the passthrough args, that explicit gws flag wins and gwcli does not inject another format flag.
 
 ```bash
 gwcli -f table -p work drive files list
@@ -166,14 +170,14 @@ gwcli -p work schema drive.files.list
 
 ### Dry Run for Safety
 
-Agents should use `--dry-run` for mutating operations before executing:
+Agents should use `--dry-run` for mutating operations only after `gwcli doctor` confirms the installed `gws` supports dry-run for the target command:
 
 ```bash
-# Validate the payload without sending
+# Validate the payload without sending, when supported by gws
 gwcli -p work --dry-run gmail users messages send \
   --params '{"userId": "me"}' \
   --json '{"raw": "..."}'
-# Returns: validation result (no email sent)
+# Returns: validation result from gws, if that command supports dry-run
 
 # If valid, execute for real
 gwcli -p work gmail users messages send \
@@ -254,7 +258,7 @@ gwcli -p <profile> sheets +read --spreadsheet <id> --range "Sheet1!A1:D10"
 gwcli -p <profile> sheets +append --spreadsheet <id> --range "Sheet1!A1" --values '["col1","col2"]'
 
 ### Safety
-- Use `--dry-run` before mutating operations
+- Use `--dry-run` before mutating operations only when `gwcli doctor` confirms support for the target command
 - Use `--fields` to limit response size
 - Use `gws schema <resource.method>` to discover API structure
 ```
@@ -293,8 +297,10 @@ gwcli completion powershell >> $PROFILE
 
 ## Non-Interactive Mode
 
-For agent/CI usage, all commands must work without TTY:
-- `profiles add` with `--client` and pre-existing credentials → skip auth login
+For agent/CI usage, non-auth commands must work without TTY:
+- `profiles add --service-account <path>` creates a non-interactive service-account profile, if Phase 0 confirms the `gws` service-account path
+- `profiles import <bundle> --name <name> --no-auth` imports metadata/client config without launching browser auth
 - `profiles remove --force` → no confirmation prompt
 - All output to stdout (parseable), errors to stderr
 - No spinner, progress bar, or color when `NO_COLOR=1` or stdout is not TTY
+- OAuth user auth (`profiles add --client`, `profiles auth`) remains interactive unless a future `gws` non-interactive credential import flow is verified and documented

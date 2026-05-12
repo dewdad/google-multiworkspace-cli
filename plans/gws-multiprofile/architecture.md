@@ -25,8 +25,7 @@
 │  │      meta.json            ← display name, email, created_at  │    │
 │  │      gws/                 ← isolated gws config directory    │    │
 │  │        client_secret.json                                    │    │
-│  │        credentials.enc                                       │    │
-│  │        token_cache.json                                      │    │
+│  │        credentials/token artifacts (gws-managed)             │    │
 │  │    work/                                                     │    │
 │  │      meta.json                                               │    │
 │  │      gws/                                                    │    │
@@ -55,9 +54,9 @@
 
 ## Components
 
-### 1. Profile Manager (`src/lib/profiles.ts`)
+### 1. Profile Manager (`src/profiles/`)
 
-Owns the lifecycle of named profiles. Each profile maps to an isolated `gws` configuration directory.
+Owns the lifecycle of named profiles. Each profile maps to an isolated `gws` configuration directory. This replaces the current plaintext `credentials.json` profile backend; existing profile commands are useful UX precedent, not reusable auth storage.
 
 **Responsibilities:**
 - Create/delete profile directories
@@ -71,40 +70,52 @@ Owns the lifecycle of named profiles. Each profile maps to an isolated `gws` con
 - Make any Google API calls
 - Manage tokens (gws handles refresh internally)
 
-### 2. Command Router (`src/lib/router.ts`)
+### 2. Command Router (`src/gws/runner.ts` + `src/profiles/resolver.ts`)
 
 Resolves the active profile, constructs the environment, and spawns `gws` as a subprocess.
 
 **Responsibilities:**
 - Parse `--profile` flag or `GWCLI_PROFILE` env var or default
 - Resolve profile name → config directory path
-- Validate that the profile is authenticated (credentials.enc exists)
+- Validate that the profile has a usable auth artifact (`credentials.enc`, `credentials.json`, service-account file, or whatever Phase 0 confirms for the pinned `gws` version)
 - Build subprocess environment with `GOOGLE_WORKSPACE_CLI_CONFIG_DIR`
-- Spawn `gws` with remaining argv passed through
+- Spawn configured `gwsBinary` with remaining argv passed through
 - Stream stdout/stderr from gws to parent process
 - Forward exit code
 
+**Argv parsing contract:**
+1. Parse only gwcli global flags before the native command or passthrough command: `--profile/-p`, `--format/-f`, `--verbose/-v`, and `--config-dir` if added.
+2. Treat `profiles`, `doctor`, `version`, `migrate`, and `completion` as gwcli-native commands.
+3. For every other first positional token, preserve the remaining argv byte-for-byte as `gwsArgs`.
+4. Support `--` as an explicit passthrough separator.
+5. Do not let Commander reject unknown options intended for `gws`.
+6. If `--format` appears in both gwcli global flags and passthrough args, do not inject a second format flag; the explicit passthrough `gws` flag wins.
+7. `--dry-run` is passed through only when the pinned `gws` version supports it. gwcli must not claim mutation safety for commands where `gws` has no dry-run behavior.
+
 **Subprocess execution model:**
 ```typescript
-const result = spawnSync('gws', gwsArgs, {
+const result = spawnSync(config.gwsBinary, gwsArgs, {
   env: {
     ...process.env,
     GOOGLE_WORKSPACE_CLI_CONFIG_DIR: profileGwsDir,
   },
-  stdio: 'inherit',  // stream output directly
+  stdio: 'inherit',  // default passthrough mode streams directly
 });
 process.exit(result.status ?? 1);
 ```
 
 ### 3. Output Formatter (`src/lib/output.ts`)
 
-Minimal transformation layer. In most cases, gwcli passes gws output through untouched.
+Minimal transformation layer. In default mode, gwcli passes `gws` output through untouched.
 
 **Responsibilities:**
-- Default mode: passthrough (gws JSON → stdout)
-- Optional: inject profile name into output (`--annotate-profile`)
-- Error wrapping: translate gws errors into gwcli-specific messages when needed
+- Default mode: pure passthrough (`stdio: 'inherit'`) so agent JSON is byte-for-byte `gws` output
+- Native gwcli commands (`profiles`, `doctor`, `version`, `migrate`) use gwcli's formatter
+- Optional capture mode only for features that must inspect output, such as `--annotate-profile`
+- Error wrapping only for preflight gwcli errors (profile missing, binary missing) and captured `gws` failures where stderr is available
   - Example: "No credentials found" → "Profile 'work' is not authenticated. Run: gwcli profiles auth work"
+
+**Important constraint:** `--annotate-profile` and byte-for-byte passthrough are mutually exclusive. If annotation is enabled, gwcli must buffer and parse JSON, and the output is no longer identical to raw `gws`.
 
 ### 4. Config Store
 
@@ -142,7 +153,7 @@ User/Agent: gwcli --profile work gmail +triage
 
 1. argv parsing: profile="work", gws_args=["gmail", "+triage"]
 2. Profile resolution: ~/.config/gwcli/profiles/work/gws/
-3. Validation: credentials.enc exists? yes → proceed
+3. Validation: usable auth artifact exists? yes → proceed
 4. Subprocess spawn:
    env: GOOGLE_WORKSPACE_CLI_CONFIG_DIR=~/.config/gwcli/profiles/work/gws/
    cmd: gws gmail +triage
@@ -161,8 +172,8 @@ User: gwcli profiles add work --client ~/Downloads/client_secret_123.json
 1. Validate profile name ("work" — OK)
 2. Create directory: ~/.config/gwcli/profiles/work/gws/
 3. Copy client_secret.json → ~/.config/gwcli/profiles/work/gws/client_secret.json
-4. Spawn: GOOGLE_WORKSPACE_CLI_CONFIG_DIR=...work/gws/ gws auth login
-5. Browser opens → user authorizes → tokens stored in work/gws/credentials.enc
+4. Spawn the verified auth command from Phase 0, usually: GOOGLE_WORKSPACE_CLI_CONFIG_DIR=...work/gws/ gws auth login
+5. Browser opens → user authorizes → tokens stored in the profile `gws/` directory using the artifact names confirmed in Phase 0
 6. Fetch email: GOOGLE_WORKSPACE_CLI_CONFIG_DIR=...work/gws/ gws gmail users getProfile --params '{"userId":"me"}' --fields "emailAddress"
 7. Store email in meta.json
 8. Done: "Profile 'work' created and authenticated as user@company.com"
@@ -194,7 +205,9 @@ Since gwcli treats `gws` as a black box with `stdio: 'inherit'` passthrough, out
 
 ### Strategy: Pinned Output Snapshots
 
-Maintain a set of **contract tests** that capture expected JSON structure from key `gws` commands. These run in CI on every `gws` version bump.
+Maintain two test layers:
+1. **Mocked runner tests** in normal CI. These verify gwcli argv parsing, env injection, profile resolution, exit-code forwarding, and native command output without requiring Google credentials.
+2. **Live contract tests** for `gws` upgrades. These require opt-in credentials and a pinned `gws` version, then capture expected JSON structure from key `gws` commands.
 
 **What to snapshot** (structure, not values):
 ```typescript
@@ -216,14 +229,15 @@ const EXPECTED_SCHEMAS = {
 ```
 
 **How it works:**
-1. Tests spawn `gws <command> --format json` with a test profile
+1. Live tests spawn `gws <command> --format json` with a test profile
 2. Parse output and assert top-level keys and nested object shapes exist
 3. Do NOT assert values — only structural contract (key names, nesting, types)
 4. Fail loudly with: "gws output contract broken for `<command>` — expected key `<key>` missing"
 
 **When to run:**
-- CI: on every PR (catches if our code accidentally breaks parsing)
-- Manual: before bumping pinned `gws` version (`gwcli doctor --check-contracts`)
+- Normal CI: mocked runner and profile tests on every PR
+- Optional/live CI or manual: before bumping pinned `gws` version (`gwcli doctor --check-contracts`)
+- Never require live Google credentials for ordinary pull requests
 
 **Graceful degradation:**
 - If contract test fails after `gws` upgrade, gwcli should still pass through raw output (agents may adapt)

@@ -8,7 +8,7 @@ The entire auth integration hinges on one environment variable:
 GOOGLE_WORKSPACE_CLI_CONFIG_DIR=<path>
 ```
 
-When set, `gws` uses `<path>` as its configuration root instead of `~/.config/gws/`. This means:
+When set, `gws` uses `<path>` as its configuration root instead of `~/.config/gws/`. Phase 0 must verify the exact artifact names for the pinned `gws` version. The expected model is:
 - Credentials are loaded from `<path>/credentials.enc`
 - Token cache lives at `<path>/token_cache.json`
 - Client secret read from `<path>/client_secret.json`
@@ -16,9 +16,11 @@ When set, `gws` uses `<path>` as its configuration root instead of `~/.config/gw
 
 **Each profile gets its own config dir = complete credential isolation.**
 
-## `gws` Credential Resolution (from source)
+Do not implement filename-specific checks until Phase 0 records the files created by the installed `gws`. The plan examples below use currently documented/observed names, but `gws` is pre-v1.0 and may change.
 
-When `gws` needs an access token, it checks in this order:
+## Expected `gws` Credential Resolution
+
+The current upstream docs describe this credential precedence. Phase 0 must verify it against the pinned version before implementation:
 
 ```
 Priority 0: GOOGLE_WORKSPACE_CLI_TOKEN env var
@@ -47,11 +49,11 @@ Priority 5: ~/.config/gcloud/application_default_credentials.json
 
 ## Our Integration Point: Priority 2
 
-For interactive user profiles, we use the **encrypted credentials** path:
+For interactive user profiles, prefer the **encrypted credentials** path when the pinned `gws` version supports it:
 
 1. `gwcli profiles add` → runs `gws auth login` with isolated config dir
-2. `gws auth login` performs the OAuth flow and writes `credentials.enc` + `.encryption_key`
-3. On subsequent commands, `gws` loads from `credentials.enc`, decrypts, refreshes token if needed
+2. `gws auth login` performs the OAuth flow and writes the verified credential artifacts
+3. On subsequent commands, `gws` loads those artifacts and refreshes tokens if needed
 
 **We never touch the credentials directly.** gws handles encryption, refresh, and caching.
 
@@ -63,9 +65,10 @@ For interactive user profiles, we use the **encrypted credentials** path:
 import { spawnSync } from 'node:child_process';
 
 function execGws(profile: ProfileMeta, gwsArgs: string[]): number {
+  const config = getGlobalConfig();
   const profileGwsDir = getProfileGwsDir(profile.name);
 
-  const result = spawnSync('gws', gwsArgs, {
+  const result = spawnSync(config.gwsBinary, gwsArgs, {
     env: {
       ...process.env,
       GOOGLE_WORKSPACE_CLI_CONFIG_DIR: profileGwsDir,
@@ -87,10 +90,11 @@ async function authenticateProfile(
   profileName: string,
   scopes: string[]
 ): Promise<void> {
+  const config = getGlobalConfig();
   const profileGwsDir = getProfileGwsDir(profileName);
-  const scopeArg = scopes.length > 0 ? ['-s', scopes.join(',')] : [];
+  const authArgs = verifiedAuthArgs(scopes);
 
-  const result = spawnSync('gws', ['auth', 'login', ...scopeArg], {
+  const result = spawnSync(config.gwsBinary, authArgs, {
     env: {
       ...process.env,
       GOOGLE_WORKSPACE_CLI_CONFIG_DIR: profileGwsDir,
@@ -111,9 +115,9 @@ async function authenticateProfile(
 | Concern | Owner |
 |---------|-------|
 | OAuth browser flow | `gws auth login` |
-| Token encryption at rest | `gws` (AES-256-GCM) |
+| Token encryption at rest | `gws` (verified in Phase 0) |
 | Token refresh | `gws` (automatic on each command) |
-| Token cache | `gws` (`token_cache.json` in config dir) |
+| Token cache | `gws` (artifact name verified in Phase 0) |
 | Profile ↔ config dir mapping | `gwcli` |
 | Credential isolation | `gwcli` (separate config dirs per profile) |
 
@@ -126,9 +130,9 @@ gwcli --profile work calendar events list
   ├─ gwcli spawns: gws calendar events list
   │
   └─ gws internal:
-       1. Load credentials.enc from config dir
-       2. Decrypt with .encryption_key
-       3. Check token_cache.json for valid access token
+       1. Load the verified credential artifact from config dir
+       2. Decrypt using the verified key storage mechanism, if encrypted credentials are used
+       3. Check token cache for a valid access token
        4. If expired: use refresh_token to get new access_token
        5. Update token_cache.json
        6. Make API call with fresh access_token
@@ -141,7 +145,7 @@ gwcli --profile work calendar events list
 
 ### Initial Scopes
 
-When `gwcli profiles add` runs `gws auth login`, it passes scope prefixes:
+When `gwcli profiles add` runs the verified `gws` auth command, it passes scope prefixes only if Phase 0 confirms that interface:
 
 ```bash
 gws auth login -s gmail,calendar,drive,keep,docs,sheets,tasks
@@ -160,7 +164,7 @@ Internally:
 GOOGLE_WORKSPACE_CLI_CONFIG_DIR=.../work/gws/ gws auth login -s meet,chat
 ```
 
-This triggers a re-consent flow. The user's browser opens, they grant the new scopes. `gws` merges them with existing credentials.
+This should trigger a re-consent flow. Phase 0 must verify whether `gws` merges scopes with existing credentials or replaces the previous grant; `gwcli` metadata must record the actual resulting scope set where discoverable.
 
 ### Scope Prefix → OAuth URL Mapping (handled by gws)
 
@@ -181,7 +185,7 @@ This triggers a re-consent flow. The user's browser opens, they grant the new sc
 
 ## Service Account Support
 
-For automation/CI scenarios, profiles can use service accounts instead of OAuth:
+For automation/CI scenarios, profiles can use service accounts instead of OAuth only after Phase 0 verifies the supported `gws` service-account path:
 
 ```bash
 gwcli profiles add ci-bot --service-account ~/keys/service-account.json
@@ -192,7 +196,8 @@ Implementation:
 function setupServiceAccountProfile(name: string, keyPath: string): void {
   const profileGwsDir = getProfileGwsDir(name);
 
-  // For service accounts, gws uses GOOGLE_APPLICATION_CREDENTIALS
+  // For service accounts, use the env var confirmed by Phase 0.
+  // Expected path: gws honors GOOGLE_APPLICATION_CREDENTIALS.
   // We store the key in the profile dir and set the env var on execution
   copyFile(keyPath, path.join(profileGwsDir, 'service-account.json'));
 
@@ -210,7 +215,7 @@ gwcli profiles status work
 
 **Checks:**
 1. Profile directory exists
-2. `gws/credentials.enc` or `gws/service-account.json` present
+2. A verified `gws` credential artifact or `gws/service-account.json` is present
 3. Token cache not stale (optional: attempt a lightweight API call)
 
 **Implementation:**
@@ -218,7 +223,7 @@ gwcli profiles status work
 async function checkAuthHealth(profileName: string): Promise<AuthStatus> {
   const gwsDir = getProfileGwsDir(profileName);
 
-  const hasCredentials = existsSync(path.join(gwsDir, 'credentials.enc'))
+  const hasCredentials = hasVerifiedGwsCredentialArtifact(gwsDir)
     || existsSync(path.join(gwsDir, 'service-account.json'));
 
   if (!hasCredentials) {
@@ -226,7 +231,8 @@ async function checkAuthHealth(profileName: string): Promise<AuthStatus> {
   }
 
   // Lightweight check: try to get the user's email
-  const result = spawnSync('gws', [
+  const config = getGlobalConfig();
+  const result = spawnSync(config.gwsBinary, [
     'gmail', 'users', 'getProfile',
     '--params', '{"userId":"me"}',
     '--fields', 'emailAddress'
@@ -249,9 +255,9 @@ async function checkAuthHealth(profileName: string): Promise<AuthStatus> {
 
 | gws Exit Code | Meaning | gwcli Response |
 |---------------|---------|----------------|
-| 4 | No credentials found | "Profile '<name>' not authenticated. Run: gwcli profiles auth <name>" |
-| 4 | Token refresh failed | "Credentials expired. Run: gwcli profiles auth <name>" |
-| 4 | Insufficient scopes | "Missing scope for this operation. Run: gwcli profiles add-scopes <name> --scopes <service>" |
+| Verified auth code | No credentials found | "Profile '<name>' not authenticated. Run: gwcli profiles auth <name>" |
+| Verified auth code | Token refresh failed | "Credentials expired. Run: gwcli profiles auth <name>" |
+| Verified permission/scope code | Insufficient scopes | "Missing scope for this operation. Run: gwcli profiles add-scopes <name> --scopes <service>" |
 | 1 | General error | Pass through gws error message |
 
 ### Graceful Degradation
@@ -271,7 +277,7 @@ Then run: gwcli doctor
 Not in v1, but the design supports it:
 - `meta.json` and `client_secret.json` are portable (no secrets)
 - After copying these to a new machine, user runs `gwcli profiles auth <name>` to re-authenticate
-- `credentials.enc` and `.encryption_key` are machine-specific (tied to OS keyring / local key file)
+- gws-managed credential and key artifacts are machine-specific when the pinned `gws` version uses encrypted local credentials
 
 ## Security Model
 
