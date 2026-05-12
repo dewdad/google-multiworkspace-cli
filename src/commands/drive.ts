@@ -24,7 +24,9 @@ interface DriveDownloadOptions extends GlobalOptions {
 export function registerDriveCommands(program: Command): void {
   const drive = program
     .command('drive')
-    .description('Manage Google Drive files (read-only)');
+    .description('Manage Google Drive files (read-only)')
+    .enablePositionalOptions()
+    .passThroughOptions();
 
   // drive list
   drive
