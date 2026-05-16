@@ -1,0 +1,116 @@
+# Calendar Reference
+
+## Quick Commands (shortcuts)
+
+```bash
+# Agenda view (next N days) — human-friendly shortcut
+gwcli calendar +agenda --days 7
+gwcli calendar +agenda --days 1                    # Today only
+gwcli --profile work calendar +agenda --days 3     # Work calendar
+```
+
+## API Passthrough Commands
+
+```bash
+gwcli [--profile <name>] calendar <resource> <method> --params '<json>' [--body '<json>']
+```
+
+### List Calendars
+```bash
+gwcli calendar calendarList list --params '{}'
+```
+
+### List Events
+```bash
+gwcli calendar events list --params '{
+  "calendarId": "primary",
+  "timeMin": "2024-01-01T00:00:00Z",
+  "timeMax": "2024-01-31T23:59:59Z",
+  "singleEvents": true,
+  "orderBy": "startTime",
+  "maxResults": 50
+}'
+```
+
+Key params:
+- `calendarId`: `"primary"` or specific calendar ID
+- `timeMin`/`timeMax`: RFC 3339 timestamps (required for bounded queries)
+- `singleEvents`: `true` to expand recurring events
+- `orderBy`: `"startTime"` (requires singleEvents=true) or `"updated"`
+- `q`: free-text search
+
+### Get a Single Event
+```bash
+gwcli calendar events get --params '{"calendarId":"primary","eventId":"<event-id>"}'
+```
+
+### Create an Event
+```bash
+gwcli calendar events insert --params '{"calendarId":"primary"}' --body '{
+  "summary": "Team Standup",
+  "description": "Daily sync",
+  "start": {"dateTime": "2024-06-15T09:00:00-07:00", "timeZone": "America/Los_Angeles"},
+  "end": {"dateTime": "2024-06-15T09:30:00-07:00", "timeZone": "America/Los_Angeles"},
+  "attendees": [{"email": "colleague@company.com"}],
+  "reminders": {"useDefault": false, "overrides": [{"method": "popup", "minutes": 10}]}
+}'
+```
+
+### Update an Event
+```bash
+gwcli calendar events patch --params '{"calendarId":"primary","eventId":"<id>"}' --body '{
+  "summary": "Updated Title",
+  "start": {"dateTime": "2024-06-15T10:00:00-07:00"}
+}'
+```
+
+### Delete an Event
+```bash
+gwcli calendar events delete --params '{"calendarId":"primary","eventId":"<id>"}'
+```
+
+### Quick Add (natural language)
+```bash
+gwcli calendar events quickAdd --params '{"calendarId":"primary","text":"Lunch with Alice tomorrow at noon"}'
+```
+
+## All-Day Events
+
+Use `date` instead of `dateTime`:
+```json
+{
+  "start": {"date": "2024-06-15"},
+  "end": {"date": "2024-06-16"}
+}
+```
+
+## Recurring Events
+
+```json
+{
+  "recurrence": ["RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR;COUNT=10"]
+}
+```
+
+## Common Patterns for Agents
+
+### "What's on my calendar today?"
+```bash
+gwcli calendar +agenda --days 1
+```
+
+### "Am I free at 3pm tomorrow?"
+```bash
+gwcli calendar events list --params '{
+  "calendarId": "primary",
+  "timeMin": "2024-06-16T15:00:00Z",
+  "timeMax": "2024-06-16T16:00:00Z",
+  "singleEvents": true
+}'
+```
+Empty `items[]` = free.
+
+### "Schedule a meeting"
+```bash
+gwcli calendar events insert --params '{"calendarId":"primary"}' --body '{"summary":"...","start":{"dateTime":"..."},"end":{"dateTime":"..."}}'
+```

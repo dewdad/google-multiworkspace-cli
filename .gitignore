@@ -6,3 +6,9 @@ dist/
 .sisyphus/run-continuation/
 client_secrets/
 
+# Skill self-improvement feedback (local only, not committed)
+skill/.feedback/
+
+# Engram local cache
+.engram/
+

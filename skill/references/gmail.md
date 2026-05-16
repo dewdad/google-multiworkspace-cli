@@ -1,0 +1,109 @@
+# Gmail Reference
+
+All Gmail commands use the gws API passthrough pattern:
+```bash
+gwcli [--profile <name>] gmail <resource> <method> --params '<json>' [--body '<json>'] [--fields '<field-mask>']
+```
+
+## Common Operations
+
+### List Messages (inbox)
+```bash
+gwcli gmail users messages list --params '{"userId":"me","maxResults":20}'
+gwcli gmail users messages list --params '{"userId":"me","maxResults":10,"q":"is:unread"}'
+gwcli gmail users messages list --params '{"userId":"me","q":"from:boss@company.com after:2024/01/01"}'
+```
+
+Useful `q` operators: `is:unread`, `is:starred`, `from:`, `to:`, `subject:`, `after:YYYY/MM/DD`, `before:YYYY/MM/DD`, `has:attachment`, `label:`, `in:inbox`, `in:sent`
+
+### Get a Message (full content)
+```bash
+gwcli gmail users messages get --params '{"userId":"me","id":"<message-id>","format":"full"}'
+```
+
+Format options: `full` (headers+body), `metadata` (headers only), `minimal` (ids only), `raw` (base64 RFC 2822)
+
+### Get Thread (conversation)
+```bash
+gwcli gmail users threads get --params '{"userId":"me","id":"<thread-id>","format":"full"}'
+```
+
+### Send a Message
+```bash
+# Raw RFC 2822 base64url-encoded
+gwcli gmail users messages send --params '{"userId":"me"}' --body '{"raw":"<base64url-encoded-message>"}'
+```
+
+To construct the `raw` field, base64url-encode an RFC 2822 message:
+```
+From: me@gmail.com
+To: recipient@example.com
+Subject: Hello
+Content-Type: text/plain; charset="UTF-8"
+
+Message body here.
+```
+
+### Create a Draft
+```bash
+gwcli gmail users drafts create --params '{"userId":"me"}' --body '{"message":{"raw":"<base64url>"}}'
+```
+
+### Reply to a Message
+```bash
+# Include In-Reply-To and References headers in the raw message
+# Set threadId to keep in same thread
+gwcli gmail users messages send --params '{"userId":"me"}' --body '{"raw":"<base64url>","threadId":"<thread-id>"}'
+```
+
+### Modify Labels (archive, star, mark read)
+```bash
+# Archive (remove INBOX label)
+gwcli gmail users messages modify --params '{"userId":"me","id":"<id>"}' --body '{"removeLabelIds":["INBOX"]}'
+
+# Mark as read
+gwcli gmail users messages modify --params '{"userId":"me","id":"<id>"}' --body '{"removeLabelIds":["UNREAD"]}'
+
+# Star
+gwcli gmail users messages modify --params '{"userId":"me","id":"<id>"}' --body '{"addLabelIds":["STARRED"]}'
+```
+
+### Delete a Message
+```bash
+gwcli gmail users messages trash --params '{"userId":"me","id":"<id>"}'
+```
+
+### List Labels
+```bash
+gwcli gmail users labels list --params '{"userId":"me"}'
+```
+
+## Field Masks
+
+Use `--fields` to reduce response size:
+```bash
+gwcli gmail users messages list --params '{"userId":"me"}' --fields 'messages(id,threadId,snippet,labelIds)'
+gwcli gmail users messages get --params '{"userId":"me","id":"<id>"}' --fields 'payload(headers,body),snippet'
+```
+
+## Pagination
+
+When `nextPageToken` is present in response:
+```bash
+gwcli gmail users messages list --params '{"userId":"me","maxResults":20,"pageToken":"<token>"}'
+```
+
+## Common Patterns for Agents
+
+### Check for new unread emails
+```bash
+gwcli gmail users messages list --params '{"userId":"me","q":"is:unread","maxResults":5}' --fields 'messages(id,threadId),resultSizeEstimate'
+```
+
+### Search and summarize
+```bash
+# Get IDs
+ids=$(gwcli gmail users messages list --params '{"userId":"me","q":"subject:invoice","maxResults":3}')
+# Get each message
+gwcli gmail users messages get --params '{"userId":"me","id":"<id>","format":"metadata"}' --fields 'payload/headers'
+```
