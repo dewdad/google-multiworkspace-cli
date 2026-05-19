@@ -1,232 +1,216 @@
-# google-workspace-cli
+# google-workspace-cli (`gwcli`)
 
-Google Workspace CLI with multi-profile support for Gmail, Calendar, and Drive. Designed for both human use and LLM agent integration.
+Multi-profile orchestration layer over the official **[`gws`](https://github.com/googleworkspace/cli)** CLI. Adds named profiles (like AWS CLI), per-profile credential isolation, and AI-agent-friendly defaults to Google Workspace's command-line tooling.
 
-## Why This Exists
+> **`gwcli` is a wrapper, not a reimplementation.** It does not call Google APIs directly — it spawns `gws` with the right credentials for the active profile. All Gmail / Calendar / Drive / Docs / Sheets / Keep / Tasks command surface comes from `gws` itself.
 
-This CLI was built specifically to give LLM agents (like Claude Code) access to Google Workspace.
+## Why this exists
 
-**Why CLI instead of MCP?** CLIs are more context-efficient. MCP servers require tool schemas to be loaded into the agent's context window on every request. A CLI skill only needs a concise command reference, and the agent invokes it via standard shell execution. Same capabilities, fewer tokens.
+The official `gws` CLI is excellent but ships with a single global credential store. If you have personal + work + client Google accounts, you have to manually swap config dirs every time. `gwcli` solves that:
 
-The JSON output mode provides structured data that agents can parse and act on.
+- **Named profiles** — `gwcli --profile work …` / `GWCLI_PROFILE=work`, with a configurable default
+- **Per-profile config isolation** — each profile gets its own `gws` config dir, so tokens never collide
+- **AI-agent shipped as a skill** — bundled `skill/` folder ships a [skillshare](https://github.com/runkids/skillshare)-installable skill so Claude Code / OpenCode / Cursor can drive Google Workspace via the CLI (more context-efficient than MCP)
+- **Native shortcuts** — high-traffic agent flows like `gwcli agenda` get first-class commands; everything else is a transparent passthrough to `gws`
 
-**Use cases:**
-- Let Claude Code read and respond to your emails
-- Have an AI agent manage your calendar
-- Search and retrieve Google Drive files programmatically
+## Dependencies
 
-## Features
+| Dependency        | Required at | Purpose                                         | How to get it          |
+| ----------------- | ----------- | ----------------------------------------------- | ---------------------- |
+| **Node.js ≥18**   | install     | runs the `gwcli` binary                         | https://nodejs.org/    |
+| **`gws`** (`@googleworkspace/cli`) | runtime | does all real Google API work | `gwcli setup` (auto-installs globally), or `npm install -g @googleworkspace/cli` manually |
+| Google OAuth client secret JSON | first profile add | per-Google-account auth | Google Cloud Console (see [Setup](#setup)) |
 
-- **Multi-account support** - Named profiles like AWS CLI (e.g., `personal`, `work`)
-- **Gmail** - List, search, read, archive, draft, send, reply
-- **Calendar** - List calendars, view events, create/update/delete events
-- **Drive** - List, search, download files, export Google Docs/Sheets/Slides
-- **Flexible output** - JSON (for agents), table, or text format
+`gws` is **not** declared as an npm dependency, because it's a global CLI binary, not a library. `gwcli setup` installs it for you, and `gwcli doctor` / `gwcli preflight` verify it's on PATH. You can override the binary path in `<config-root>/config.json` → `gwsBinary` if you have a non-standard install.
 
 ## Installation
 
 ```bash
-git clone https://github.com/ianpatrickhines/google-workspace-cli.git
-cd google-workspace-cli
-npm install
-npm run build
-npm link
+# 1. Install gwcli
+npm install -g google-workspace-cli
+
+# 2. Install gws + create config dirs (idempotent)
+gwcli setup
+
+# 3. Verify
+gwcli doctor
 ```
+
+`gwcli setup` runs `npm install -g @googleworkspace/cli` for you and verifies the version meets the minimum (`0.20.0`). Re-run any time to repair an install. Add `--gws-version <ver>` to pin a specific `gws` version.
 
 ## Setup
 
-### 1. Create Google Cloud OAuth Credentials
+### 1. Create a Google Cloud OAuth client (per Google account)
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project (or select existing)
-3. Enable APIs:
-   - Gmail API
-   - Google Calendar API
-   - Google Drive API
-4. Go to **APIs & Services > Credentials**
-5. Click **Create Credentials > OAuth client ID**
-6. Select **Desktop app** as application type
-7. Download the JSON file
+2. Create or select a project
+3. **APIs & Services → Library** — enable each API you need (Gmail, Calendar, Drive, Docs, Sheets, Keep, Tasks)
+4. **APIs & Services → Credentials → Create Credentials → OAuth client ID**
+5. Application type: **Desktop app**
+6. Download the JSON
 
-### 2. Add a Profile
+You can reuse one OAuth client across multiple `gwcli` profiles, or create one per account — both work.
+
+### 2. Add a profile
 
 ```bash
 gwcli profiles add personal --client ~/Downloads/client_secret_*.json
 ```
 
-This opens a browser for Google authentication. After authorizing, the tokens are stored locally.
+This opens a browser for OAuth consent. Tokens are stored under `<config-root>/profiles/personal/gws/` (isolated from any other profile and from any pre-existing global `gws` install).
 
-### 3. Set Default Profile (optional)
+By default all supported services are requested. To restrict scopes:
+
+```bash
+gwcli profiles add work --client ~/work-client.json --scopes gmail,calendar,drive
+```
+
+> **Scopes are immutable on a profile.** To change the scope set, `profiles remove` then `profiles add` again.
+
+### 3. Set a default profile (optional)
 
 ```bash
 gwcli profiles set-default personal
 ```
 
+Profile resolution order: `--profile <name>` flag → `GWCLI_PROFILE` env var → configured default → error.
+
 ## Usage
 
-### Profile Selection
+`gwcli` has two command surfaces:
+
+### A) Native commands (handled by `gwcli` itself)
+
+| Command                    | Purpose                                                              |
+| -------------------------- | -------------------------------------------------------------------- |
+| `gwcli profiles <action>`  | `list`, `add`, `remove`, `rename`, `set-default`, `auth`, `status`   |
+| `gwcli agenda [--days N]`  | Profile-aware "what's on my calendar" shortcut                       |
+| `gwcli setup`              | Install `gws` + create config dirs                                   |
+| `gwcli preflight`          | Fast (<500ms) dependency check for agents (silent on success)        |
+| `gwcli doctor`             | Detailed system health report                                        |
+| `gwcli migrate`            | Migrate v1 profiles to the current layout                            |
+| `gwcli version-info`       | Show `gwcli` and `gws` versions                                      |
+
+### B) Passthrough to `gws`
+
+Anything that isn't a native command is forwarded to `gws` with the active profile's credentials. The argument shape is `gws`'s — see [`gws` docs](https://github.com/googleworkspace/cli) for the full surface, or run `gwcli <service> --help`.
 
 ```bash
-gwcli --profile work gmail list     # Use specific profile
-GWCLI_PROFILE=work gwcli gmail list # Via environment variable
-gwcli gmail list                    # Uses default profile
+# Gmail
+gwcli gmail users messages list --params '{"userId":"me","maxResults":20}'
+gwcli gmail users messages get  --params '{"userId":"me","id":"<msg-id>"}'
+
+# Calendar (or use the native shortcut: gwcli agenda --days 7)
+gwcli calendar events list --params '{"calendarId":"primary","timeMin":"<ISO>","timeMax":"<ISO>"}'
+gwcli calendar events insert --params '{"calendarId":"primary"}' --body '<event-json>'
+
+# Drive
+gwcli drive files list --params '{"pageSize":20}'
+gwcli drive files export --params '{"fileId":"<id>","mimeType":"application/pdf"}'
+
+# Keep, Tasks, Docs, Sheets — same router pattern, see gws docs
+gwcli keep notes list --params '{"pageSize":25}'
+gwcli tasks tasks list --params '{"tasklist":"@default"}'
 ```
 
-### Gmail
+### Global flags
 
 ```bash
-# List recent emails
-gwcli gmail list
-gwcli gmail list --unread --limit 20
-
-# Search emails
-gwcli gmail search "from:boss@example.com"
-gwcli gmail search "subject:invoice is:unread"
-
-# Read email
-gwcli gmail read <message-id>
-gwcli gmail thread <thread-id>
-
-# Compose and send
-gwcli gmail draft --to user@example.com --subject "Hello" --body "Message"
-gwcli gmail send <draft-id>
-gwcli gmail send --to user@example.com --subject "Hello" --body "Message"
-
-# Reply to a message
-gwcli gmail reply <message-id> --body "Thanks for your email"
-
-# Archive or trash
-gwcli gmail archive <message-id>
-gwcli gmail trash <message-id>
+gwcli --profile work <cmd>     # one-off profile selection (alias: -p)
+gwcli --format json <cmd>      # force JSON output (alias: -f). gws also supports table, yaml, csv
+gwcli --verbose <cmd>          # log profile resolution + the full gws invocation to stderr
+gwcli -- <raw-gws-args>        # explicit passthrough separator if a flag clashes with gwcli's
 ```
 
-### Calendar
-
-```bash
-# List calendars
-gwcli calendar list
-
-# View upcoming events
-gwcli calendar events
-gwcli calendar events --days 14 --limit 20
-
-# Search events
-gwcli calendar search "meeting"
-
-# Create event
-gwcli calendar create "Team Meeting" --start "2025-01-15 10:00" --end "2025-01-15 11:00"
-gwcli calendar create "Lunch" --start "tomorrow 12:00"
-
-# Update event
-gwcli calendar update <event-id> --title "New Title" --start "2025-01-15 14:00"
-
-# Delete event
-gwcli calendar delete <event-id>
-```
-
-### Drive
-
-```bash
-# List files
-gwcli drive list
-gwcli drive list --folder <folder-id> --limit 50
-
-# Search files
-gwcli drive search "name contains 'report'"
-gwcli drive search "mimeType = 'application/pdf'"
-
-# Download file
-gwcli drive download <file-id>
-gwcli drive download <file-id> --output ~/Downloads/report.pdf
-
-# Export Google Docs/Sheets/Slides
-gwcli drive export <doc-id> --format pdf
-gwcli drive export <sheet-id> --format xlsx
-gwcli drive export <slide-id> --format pptx
-```
-
-### Output Formats
-
-```bash
-gwcli gmail list --format json    # JSON (for scripting/Claude Code)
-gwcli gmail list --format table   # Formatted table (default)
-gwcli gmail list --format text    # Plain text
-```
-
-## Profile Management
-
-```bash
-gwcli profiles list               # List all profiles
-gwcli profiles add <name> --client <path>  # Add new profile
-gwcli profiles remove <name>      # Delete profile
-gwcli profiles set-default <name> # Set default profile
-```
+`--profile` / `--format` / `--verbose` are stripped before forwarding; everything else goes to `gws` verbatim.
 
 ## Configuration
 
-Config files are stored in `~/.config/gwcli/`:
+Config root depends on platform:
+
+- **Linux / macOS**: `~/.config/gwcli/`
+- **Windows**: `%APPDATA%\gwcli\`
+- **Override**: set `GWCLI_CONFIG_DIR=/some/path` (useful for tests / sandboxes)
 
 ```
-~/.config/gwcli/
-├── config.json                   # Global settings, default profile
+<config-root>/
+├── config.json              # global: defaultProfile, gwsBinary path, defaults
 └── profiles/
     ├── personal/
-    │   ├── credentials.json      # OAuth tokens
-    │   └── config.json           # Profile metadata
+    │   ├── meta.json        # display name, scopes, created-at
+    │   └── gws/             # isolated gws config dir (tokens, oauth client, etc.)
     └── work/
-        └── credentials.json
+        ├── meta.json
+        └── gws/
 ```
 
-## LLM Agent Integration
+`config.json` schema:
 
-### Claude Code
-
-To use with Claude Code, create a skill file that teaches it how to use the CLI.
-
-**Example skill** (`~/.claude/skills/gwcli/SKILL.md`):
-
-```yaml
----
-name: gwcli
-description: "Google Workspace CLI for Gmail, Calendar, and Drive. Use when reading/sending emails, managing calendar events, or accessing Drive files."
----
+```json
+{
+  "version": 1,
+  "defaultProfile": "personal",
+  "gwsBinary": "gws",
+  "settings": {
+    "defaultFormat": "json",
+    "annotateProfile": false
+  }
+}
 ```
 
-Then add command reference and examples in the skill body. The key is using `--format json` so Claude can parse the output:
+Set `gwsBinary` to an absolute path if `gws` isn't on `PATH`, or to pin a specific install (e.g. `/usr/local/lib/node_modules/@googleworkspace/cli/run.js`).
+
+## AI agent integration
+
+This repo ships an AI skill at [`skill/SKILL.md`](skill/SKILL.md) that teaches Claude Code, OpenCode, Cursor, etc. how to drive `gwcli`. Install it via [skillshare](https://github.com/runkids/skillshare):
 
 ```bash
-# Claude can parse this structured output
-gwcli gmail list --format json
-gwcli calendar events --format json
+skillshare install google-workspace-cli
 ```
 
-### Other LLM Agents
+Or point your agent's skill loader at `skill/SKILL.md` directly. The skill includes a mandatory `gwcli preflight` step (silent on success, exit codes `60–69` on remediable issues) and full per-service references under `skill/references/`.
 
-Any agent that can execute shell commands can use this CLI. The JSON output mode provides structured data:
-
-```bash
-# Returns JSON array of emails
-gwcli gmail list --format json
-
-# Returns JSON array of calendar events
-gwcli calendar events --days 7 --format json
-
-# Returns JSON array of files
-gwcli drive list --format json
-```
-
-### Pre-Approving Commands
-
-For Claude Code, you can pre-approve gwcli commands in your settings so the agent can run them without confirmation:
+### Pre-approving for Claude Code
 
 ```json
 {
   "permissions": {
-    "allow": [
-      "Bash(gwcli:*)"
-    ]
+    "allow": ["Bash(gwcli:*)"]
   }
 }
+```
+
+### Direct shell use from any agent
+
+```bash
+gwcli gmail users messages list --params '{"userId":"me"}' --format json
+gwcli agenda --days 7 --format json
+gwcli drive files list --params '{"pageSize":20}' --format json
+```
+
+`gwcli profiles list` and other native commands auto-select JSON when stdout is piped (table when interactive). Pass `--format json` to force it.
+
+## Troubleshooting
+
+| Symptom                          | Cause                                        | Fix                                           |
+| -------------------------------- | -------------------------------------------- | --------------------------------------------- |
+| `gws binary not found`           | `gws` not installed / not on PATH            | `gwcli setup`, or set `gwsBinary` in config   |
+| `preflight` exits `63`           | `gws` missing/outdated                       | `gwcli setup`                                 |
+| `preflight` exits `64`           | No profiles configured                       | `gwcli profiles add <name> --client <path>`   |
+| `gwcli: command not found`       | `gwcli` not installed globally               | `npm install -g google-workspace-cli`         |
+| Auth errors during API call      | Profile token expired/revoked                | `gwcli profiles auth <name>`                  |
+
+For the full exit-code table (including `gws`'s 1/2 runtime codes), see [`skill/references/troubleshooting.md`](skill/references/troubleshooting.md).
+
+## Development
+
+```bash
+git clone https://github.com/dewdad/google-multiworkspace-cli.git
+cd google-multiworkspace-cli
+npm install
+npm run build       # tsc → dist/
+npm test            # vitest
+npm link            # symlink dist/index.js as `gwcli` for local testing
 ```
 
 ## License

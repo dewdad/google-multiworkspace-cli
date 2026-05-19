@@ -39,11 +39,11 @@
     "claude",
     "opencode"
   ],
-  "author": "Ian Hines",
+  "author": "Avital Ben-Natan",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ianpatrickhines/google-workspace-cli.git"
+    "url": "https://github.com/dewdad/google-multiworkspace-cli.git"
   },
   "dependencies": {
     "chalk": "^5.3.0",

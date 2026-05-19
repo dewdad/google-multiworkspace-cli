@@ -11,7 +11,7 @@ metadata:
   version: "2.1.0"
   tags: "google, workspace, gmail, calendar, drive, docs, sheets, keep, tasks, multi-account"
   requires-bins: "node, gwcli"
-  homepage: "https://github.com/ianpatrickhines/google-workspace-cli"
+  homepage: "https://github.com/dewdad/google-multiworkspace-cli"
   license: "MIT"
   self-improving: true
 ---
