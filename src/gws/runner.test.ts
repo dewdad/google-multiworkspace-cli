@@ -59,10 +59,12 @@ describe('runGws', () => {
 
   it('uses inherit stdio in passthrough mode', () => {
     const mockSpawnSync = vi.mocked(spawnSync);
+    // In inherit mode, real spawnSync returns Buffer-typed but null-valued stdout/stderr.
+    // Buffer.alloc(0) is the type-safe stand-in for "no captured output" in tests.
     mockSpawnSync.mockReturnValue({
       status: 0,
-      stdout: '' as any,
-      stderr: '' as any,
+      stdout: Buffer.alloc(0),
+      stderr: Buffer.alloc(0),
       pid: 1234,
       output: ['', '', ''],
       signal: null,

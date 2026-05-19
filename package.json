@@ -1,6 +1,6 @@
 {
   "name": "google-workspace-cli",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Multi-profile Google Workspace CLI — orchestration layer over gws. Installable as AI skill via skillshare.",
   "type": "module",
   "main": "dist/index.js",
@@ -19,9 +19,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "clean": "rm -rf dist",
-    "skill:preflight": "node skill/scripts/preflight.mjs",
-    "skill:setup": "node skill/scripts/setup.mjs",
-    "skill:doctor": "node skill/scripts/doctor.mjs"
+    "skill:setup": "node skill/scripts/setup.mjs"
   },
   "keywords": [
     "google",

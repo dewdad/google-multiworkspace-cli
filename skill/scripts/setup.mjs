@@ -40,25 +40,35 @@ step('check-node', () => {
 
 // Step 2: Install gws globally
 step('install-gws', () => {
+  const shellOpt = IS_WIN ? { shell: true } : {};
   try {
-    const ver = execSync('gws --version', { encoding: 'utf-8', timeout: 10000, stdio: 'pipe' }).trim();
+    const ver = execSync('gws --version', { encoding: 'utf-8', timeout: 10000, stdio: 'pipe', ...shellOpt }).trim();
     return `already installed: ${ver}`;
   } catch {
+    // Verify package exists on registry before attempting install (defends against typos
+    // and registry outages that would otherwise produce a confusing npm error).
+    log('  Verifying @googleworkspace/cli is published...');
+    try {
+      execSync('npm view @googleworkspace/cli version', { stdio: 'pipe', timeout: 30000, ...shellOpt });
+    } catch (e) {
+      throw new Error(`@googleworkspace/cli not resolvable on the npm registry: ${e.message.split('\n')[0]}`);
+    }
     log('  Installing @googleworkspace/cli globally...');
-    execSync('npm install -g @googleworkspace/cli', { stdio: 'pipe', timeout: 120000 });
-    const ver = execSync('gws --version', { encoding: 'utf-8', timeout: 10000, stdio: 'pipe' }).trim();
+    execSync('npm install -g @googleworkspace/cli', { stdio: 'pipe', timeout: 120000, ...shellOpt });
+    const ver = execSync('gws --version', { encoding: 'utf-8', timeout: 10000, stdio: 'pipe', ...shellOpt }).trim();
     return `installed: ${ver}`;
   }
 });
 
 // Step 3: Install gwcli globally
 step('install-gwcli', () => {
+  const shellOpt = IS_WIN ? { shell: true } : {};
   try {
-    execSync('gwcli --version', { encoding: 'utf-8', timeout: 10000, stdio: 'pipe' });
+    execSync('gwcli --version', { encoding: 'utf-8', timeout: 10000, stdio: 'pipe', ...shellOpt });
     return 'already installed';
   } catch {
     log('  Installing google-workspace-cli globally...');
-    execSync('npm install -g google-workspace-cli', { stdio: 'pipe', timeout: 120000 });
+    execSync('npm install -g google-workspace-cli', { stdio: 'pipe', timeout: 120000, ...shellOpt });
     return 'installed';
   }
 });
@@ -78,8 +88,9 @@ step('config-dir', () => {
 
 // Step 5: Verify gws version compatibility
 step('verify-compat', () => {
+  const shellOpt = IS_WIN ? { shell: true } : {};
   try {
-    const stdout = execSync('gws --version', { encoding: 'utf-8', timeout: 10000, stdio: 'pipe' });
+    const stdout = execSync('gws --version', { encoding: 'utf-8', timeout: 10000, stdio: 'pipe', ...shellOpt });
     const match = stdout.match(/(\d+\.\d+\.\d+)/);
     const version = match ? match[1] : 'unknown';
     const [major, minor] = version.split('.').map(Number);

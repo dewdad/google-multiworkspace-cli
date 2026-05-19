@@ -14,15 +14,26 @@ export function registerProfilesCommands(program: Command): void {
 
   profiles
     .command('list')
-    .description('List all profiles')
-    .option('--format <fmt>', 'Output format: json, table')
+    .description('List all profiles. Defaults to JSON when piped, table when interactive.')
+    .option('--format <fmt>', 'Output format: json, table (default: auto)')
     .action((options) => {
       const entries = listAllProfiles();
-      const format = options.format ?? program.opts().format ?? 'table';
+      // Format resolution:
+      //   1. explicit --format on the subcommand
+      //   2. global --format on gwcli
+      //   3. auto: JSON if not TTY (piped/captured), table if interactive
+      const format =
+        options.format ??
+        program.opts().format ??
+        (process.stdout.isTTY ? 'table' : 'json');
 
       if (entries.length === 0) {
-        console.log('No profiles configured.');
-        console.log('Add a profile with: gwcli profiles add <name> --client <path>');
+        if (format === 'json') {
+          console.log('[]');
+        } else {
+          console.log('No profiles configured.');
+          console.log('Add a profile with: gwcli profiles add <name> --client <path>');
+        }
         return;
       }
 
@@ -184,27 +195,65 @@ export function registerProfilesCommands(program: Command): void {
 
   profiles
     .command('status [name]')
-    .description('Check auth status of a profile')
-    .action((name?: string) => {
+    .description('Check auth status of one profile or all profiles')
+    .option('--format <fmt>', 'Output format: text (default), json')
+    .option('--strict', 'Exit non-zero if any profile is not authenticated (bulk mode only)')
+    .action((name: string | undefined, options) => {
       try {
         findGwsBinary();
+
+        const explicitFormat = options.format ?? program.opts().format;
+        const wantJson =
+          explicitFormat === 'json' ||
+          (!explicitFormat && !process.stdout.isTTY);
 
         if (name) {
           const { exitCode, status } = runGwsAuthStatus(name);
           if (status) {
-            console.log(JSON.stringify(status, null, 2));
+            if (wantJson) {
+              console.log(JSON.stringify({ profile: name, status }, null, 2));
+            } else {
+              console.log(JSON.stringify(status, null, 2));
+            }
           }
           if (exitCode !== 0) {
             process.exit(exitCode);
           }
+          return;
+        }
+
+        // Bulk mode: status for all profiles
+        const entries = listAllProfiles();
+        const anyUnauthenticated = entries.some(e => !e.authenticated);
+
+        if (wantJson) {
+          console.log(
+            JSON.stringify(
+              {
+                profiles: entries.map(e => ({
+                  name: e.name,
+                  email: e.email,
+                  authenticated: e.authenticated,
+                  isDefault: e.isDefault,
+                  scopes: e.scopes,
+                })),
+                allAuthenticated: !anyUnauthenticated,
+                count: entries.length,
+              },
+              null,
+              2
+            )
+          );
         } else {
-          // Show status for all profiles
-          const entries = listAllProfiles();
           for (const entry of entries) {
             const marker = entry.isDefault ? '*' : ' ';
             const authStatus = entry.authenticated ? '✓' : '✗';
             console.log(`${marker} ${authStatus} ${entry.name.padEnd(20)} ${entry.email ?? '(no email)'}`);
           }
+        }
+
+        if (options.strict && anyUnauthenticated) {
+          process.exit(2);
         }
       } catch (err) {
         if (err instanceof GwcliError) {

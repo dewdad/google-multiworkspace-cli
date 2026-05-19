@@ -7,15 +7,19 @@ import { execGwsPassthrough } from './gws/runner.js';
 import { findGwsBinary } from './gws/binary.js';
 import { runDoctor } from './commands/doctor.js';
 import { runMigrate } from './commands/migrate.js';
+import { runPreflight } from './commands/preflight.js';
+import { runSetup } from './commands/setup.js';
+import { runAgenda } from './commands/agenda.js';
 import { tryTranslateCompat } from './compat/translations.js';
 import { GwcliError } from './types/index.js';
+import { GWCLI_VERSION } from './version.js';
 
 const program = new Command();
 
 program
   .name('gwcli')
   .description('Multi-profile Google Workspace CLI — orchestration layer over gws')
-  .version('2.0.0')
+  .version(GWCLI_VERSION)
   .option('-p, --profile <name>', 'Select profile for this invocation')
   .option('-f, --format <fmt>', 'Output format: json, table, yaml, csv')
   .option('-v, --verbose', 'Show debug info (profile resolution, gws command)')
@@ -48,8 +52,46 @@ program
   .description('Show version info for gwcli and gws')
   .action(() => {
     const gwsInfo = findGwsBinary();
-    console.log(`gwcli  2.0.0`);
+    console.log(`gwcli  ${GWCLI_VERSION}`);
     console.log(`gws    ${gwsInfo.version}  (${gwsInfo.path})`);
+  });
+
+program
+  .command('preflight')
+  .description('Fast dependency check (gws + at least one profile). Silent on success.')
+  .option('--json', 'Emit a JSON report on stderr (silent on success otherwise)')
+  .action(async (options) => {
+    await runPreflight(options);
+  });
+
+program
+  .command('setup')
+  .description('Install gws and create config directories. Idempotent.')
+  .option('--json', 'Emit JSON report instead of human-readable output')
+  .option('--gws-version <version>', 'Pin a specific gws version (default: latest)')
+  .action(async (options) => {
+    await runSetup({ json: options.json, gwsVersion: options.gwsVersion });
+  });
+
+// `gwcli agenda` — native, profile-aware shortcut for "what's on my calendar?"
+// Implemented natively (composes events.list with timeMin/timeMax) so it works
+// regardless of whether the underlying gws supports a `+agenda` shortcut.
+program
+  .command('agenda')
+  .description('Show upcoming calendar events for the next N days')
+  .option('-d, --days <n>', 'Number of days ahead to fetch (default: 7)', '7')
+  .option('-c, --calendar <id>', 'Calendar ID (default: primary)', 'primary')
+  .option('--max <n>', 'Max events to return (default: 50)', '50')
+  .action((opts) => {
+    const profileFlag = program.opts().profile as string | undefined;
+    const formatFlag = program.opts().format as string | undefined;
+    runAgenda({
+      profileFlag,
+      formatFlag,
+      days: Number(opts.days),
+      calendarId: opts.calendar,
+      maxResults: Number(opts.max),
+    });
   });
 
 // ─── Passthrough: Everything else goes to gws ────────────────────────────────
@@ -63,7 +105,16 @@ interface ParsedArgs {
   gwsArgs: string[];
 }
 
-const NATIVE_COMMANDS = new Set(['profiles', 'doctor', 'version-info', 'migrate', 'help']);
+const NATIVE_COMMANDS = new Set([
+  'profiles',
+  'doctor',
+  'version-info',
+  'migrate',
+  'preflight',
+  'setup',
+  'agenda',
+  'help',
+]);
 
 function parseGwcliArgs(rawArgs: string[]): ParsedArgs {
   let profileFlag: string | undefined;
@@ -142,9 +193,15 @@ function handlePassthrough(rawArgs: string[]): void {
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
+// Help/version flags are gwcli-native — route them to Commander, not gws.
+const TOP_LEVEL_HELP_FLAGS = new Set(['-h', '--help', '-V', '--version']);
+const rawArgvSlice = process.argv.slice(2);
+const wantsTopLevelHelp =
+  rawArgvSlice.length > 0 && rawArgvSlice.every(a => TOP_LEVEL_HELP_FLAGS.has(a));
+
 // Check if the first non-flag arg is a native command
 const firstNonFlagArg = (() => {
-  const args = process.argv.slice(2);
+  const args = rawArgvSlice;
   let i = 0;
   while (i < args.length) {
     const a = args[i]!;
@@ -163,7 +220,8 @@ const firstNonFlagArg = (() => {
   return undefined;
 })();
 
-const isNativeCommand = firstNonFlagArg && NATIVE_COMMANDS.has(firstNonFlagArg);
+const isNativeCommand =
+  wantsTopLevelHelp || (firstNonFlagArg ? NATIVE_COMMANDS.has(firstNonFlagArg) : false);
 
 if (isNativeCommand) {
   // Let Commander handle native commands normally

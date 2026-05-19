@@ -1,5 +1,7 @@
 # Keep Reference
 
+> **⚠ Enterprise/Workspace only.** The Google Keep API is gated to Google Workspace accounts with admin-level enablement of the Keep API. **Consumer Gmail accounts (`@gmail.com`) cannot use this API** — Keep on consumer accounts has no public API. Calls will fail with `insufficient_scope` or `403 PERMISSION_DENIED`. Verify the target profile is a Workspace account and that the admin has enabled the Keep API in the Google Cloud project before troubleshooting.
+
 All Keep commands use the gws API passthrough pattern:
 ```bash
 gwcli [--profile <name>] keep <resource> <method> --params '<json>' [--body '<json>']

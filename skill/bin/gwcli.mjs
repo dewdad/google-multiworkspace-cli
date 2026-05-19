@@ -14,11 +14,15 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SKILL_DIR = dirname(__dirname);
 const args = process.argv.slice(2);
+const IS_WIN = process.platform === 'win32';
 
 // Strategy 1: Global gwcli
+// On Windows, npm globals install as .cmd shims that require shell:true
+// to be invoked via execSync/spawnSync. Without the flag, the probe always
+// throws and we fall through to the slow npx path on every invocation.
 function tryGlobal() {
   try {
-    execSync('gwcli --version', { stdio: 'pipe', timeout: 5000 });
+    execSync('gwcli --version', { stdio: 'pipe', timeout: 5000, shell: IS_WIN });
     return 'gwcli';
   } catch {
     return null;
@@ -43,8 +47,9 @@ function tryNpx() {
 const command = tryGlobal() || tryLocalBuild() || tryNpx();
 
 if (command === 'gwcli') {
-  // Direct spawn for global install
-  const result = spawnSync('gwcli', args, { stdio: 'inherit', shell: true });
+  // Direct spawn for global install. shell:true on Windows for .cmd shims;
+  // on POSIX, avoid shell to prevent argument-quoting surprises.
+  const result = spawnSync('gwcli', args, { stdio: 'inherit', shell: IS_WIN });
   process.exit(result.status ?? 1);
 } else if (command.startsWith('node ')) {
   // Local build
@@ -52,10 +57,10 @@ if (command === 'gwcli') {
   const result = spawnSync(process.execPath, [script, ...args], { stdio: 'inherit' });
   process.exit(result.status ?? 1);
 } else {
-  // npx fallback
+  // npx fallback (npm/npx are .cmd on Windows, plain executables elsewhere)
   const result = spawnSync(command.split(' ')[0], [...command.split(' ').slice(1), ...args], {
     stdio: 'inherit',
-    shell: true,
+    shell: IS_WIN,
   });
   process.exit(result.status ?? 1);
 }

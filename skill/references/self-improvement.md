@@ -1,68 +1,41 @@
 # Self-Improvement Protocol
 
-This skill is designed to evolve through agent usage. When agents encounter issues, discover better patterns, or optimize workflows, they record feedback that future invocations can learn from.
+This skill is designed to evolve through usage. Agents that discover bugs, doc inaccuracies, or better patterns should fix them in place.
 
-## Feedback Directory
+## How to improve the skill
 
-```
-$SKILL_DIR/.feedback/
-├── issues.jsonl      # Problems encountered (append-only)
-├── changes.jsonl     # Skill modifications made by agents (append-only)
-└── patterns.jsonl    # Discovered usage patterns (append-only)
-```
+When you find a problem (wrong command, missing flag, broken example, unclear instruction):
 
-## Recording Issues
+1. **Edit the relevant file directly** using your file-editing tools (e.g. the `edit` or `write` tools in your harness). The skill is a regular directory of markdown + scripts — no special update mechanism is needed.
+2. **Keep changes minimal and targeted.** One issue per edit. Preserve unrelated content.
+3. **Verify** that your change doesn't break anything: `gwcli doctor` for runtime, `npm test` (in the project repo) for code changes.
+4. **Note the change in your final response** so the user can review and propagate it (e.g. via git commit, skillshare publish, or upstream PR).
 
-When a command fails unexpectedly or produces suboptimal results:
+## What you may modify
 
-```bash
-echo '{"ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","type":"issue","command":"<what was run>","error":"<what happened>","context":"<what the user was trying to do>","resolution":"<how it was fixed or null>"}' >> "$SKILL_DIR/.feedback/issues.jsonl"
-```
+- `SKILL.md` — top-level commands, summary tables, error recovery
+- `references/*.md` — service-specific commands and recipes
+- `scripts/*.mjs` — diagnostic scripts (preflight, doctor, setup) — kept for compatibility; native `gwcli preflight`/`setup`/`doctor` are preferred entry points
 
-## Recording Changes
+## What you must NOT modify without explicit user approval
 
-When an agent modifies any skill file (SKILL.md, references, scripts):
+1. The frontmatter `name` and `description` (changes break skill discovery)
+2. The skill's overall architecture (adding/removing top-level files)
+3. The `metadata.version` field — bump only when a coherent set of improvements is ready to ship
 
-```bash
-echo '{"ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","type":"change","file":"<path>","description":"<what changed and why>","trigger":"<issue that caused this>"}' >> "$SKILL_DIR/.feedback/changes.jsonl"
-```
+## Removing functionality
 
-## Recording Patterns
+Never delete an existing command, reference section, or example unless:
+- It's documented as wrong in the actual `gws`/`gwcli` source, AND
+- You've replaced it with a working equivalent, AND
+- You've explained the change in your response.
 
-When an agent discovers a useful multi-step workflow:
+## Contributing improvements upstream
 
-```bash
-echo '{"ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","type":"pattern","name":"<short name>","steps":["step1","step2"],"context":"<when to use this pattern>"}' >> "$SKILL_DIR/.feedback/patterns.jsonl"
-```
+If this skill is installed via `skillshare` from a hub, edits stay local to your machine. To share improvements with others:
 
-## Self-Healing Rules
+1. Copy your edits into the source repo (`git diff` against the upstream).
+2. Open a PR or DM the maintainer.
+3. The skillshare hub picks up changes on the next `skillshare sync`.
 
-Agents MAY modify skill files when:
-1. A command reference is incorrect (API changed, wrong params)
-2. A troubleshooting entry is missing for a newly-discovered error
-3. A script has a bug that was diagnosed and fixed
-4. A pattern is so common it should be in SKILL.md
-
-Agents MUST NOT:
-1. Remove existing working functionality
-2. Change the skill's core architecture without user approval
-3. Modify the frontmatter (name, description) without explicit request
-4. Delete feedback logs
-
-## Improvement Triggers
-
-After accumulating 3+ issues of the same type:
-1. The agent SHOULD propose a fix to the relevant reference or script
-2. If the fix is low-risk (documentation update), apply directly
-3. If the fix changes behavior (script logic), propose to the user first
-
-## Version Tracking
-
-Changes accumulate in `.feedback/changes.jsonl`. Periodically (or on user request), these should be reviewed and the skill's `metadata.version` bumped in SKILL.md frontmatter.
-
-## Sharing Improvements
-
-If this skill is installed via `skillshare install --track`, improvements can be contributed upstream via:
-1. Agent creates a summary of changes from `.feedback/changes.jsonl`
-2. User reviews and approves
-3. Changes are committed to the skill's git repository
+There is no automatic phone-home or feedback channel from this skill — improvements are entirely opt-in by the human user.

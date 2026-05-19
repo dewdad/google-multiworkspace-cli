@@ -1,6 +1,7 @@
 import { checkGwsBinary } from '../gws/binary.js';
 import { listAllProfiles } from '../profiles/index.js';
 import { CONFIG_ROOT } from '../profiles/config.js';
+import { GWCLI_VERSION } from '../version.js';
 import type { DoctorCheck } from '../types/index.js';
 
 export async function runDoctor(): Promise<void> {
@@ -60,7 +61,7 @@ export async function runDoctor(): Promise<void> {
   }
 
   // Print results
-  console.log(`gwcli  2.0.0`);
+  console.log(`gwcli  ${GWCLI_VERSION}`);
   if (gwsInfo) {
     console.log(`gws    v${gwsInfo.version}`);
   }

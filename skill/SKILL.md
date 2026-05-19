@@ -8,9 +8,9 @@ description: |
   accessing Google Docs/Sheets, or any Google Workspace task for a specific user account.
 argument-hint: "[service] [action] [--profile name] [--format json]"
 metadata:
-  version: "2.0.0"
+  version: "2.1.0"
   tags: "google, workspace, gmail, calendar, drive, docs, sheets, keep, tasks, multi-account"
-  requires-bins: "node"
+  requires-bins: "node, gwcli"
   homepage: "https://github.com/ianpatrickhines/google-workspace-cli"
   license: "MIT"
   self-improving: true
@@ -18,24 +18,41 @@ metadata:
 
 # Google Workspace
 
-> **All output is JSON by default.** Structured for agent parsing.
+> **`gws` passthrough output is JSON by default.** Native gwcli commands (`profiles list`, `profiles status`) emit JSON when stdout is piped, table when interactive — pass `--format json` to force JSON unconditionally.
 
 ## Step 0 — Preflight (MANDATORY, every invocation)
 
 ```bash
-node "$SKILL_DIR/scripts/preflight.mjs"
+gwcli preflight
 ```
 
-Exit 0 + no output = ready. On non-zero:
+Exit `0` + silent = ready. On non-zero, gwcli writes nothing — re-run with `--json` for a machine-readable diagnosis:
+
+```bash
+gwcli preflight --json
+```
+
+### Preflight exit codes (gwcli-namespaced, range 60–69)
 
 | Exit | Meaning | Action |
 |------|---------|--------|
-| `1` | Node.js < 18 | Ask user to update Node |
-| `2` | `gwcli` not installed | Run: `node "$SKILL_DIR/scripts/setup.mjs"` |
-| `3` | `gws` binary missing/outdated | Run: `node "$SKILL_DIR/scripts/setup.mjs"` |
-| `4` | No profiles configured | See "Account Setup" below |
+| `0` | ready | proceed |
+| `63` | `gws` binary missing/outdated | `gwcli setup` |
+| `64` | no profiles configured | see "Account Setup" below |
+| `127` (or "command not found") | `gwcli` itself not installed | `npm install -g google-workspace-cli`, then re-run |
+
+> **These are distinct from runtime exit codes** (1, 2) emitted by `gws` API calls. See [`references/troubleshooting.md`](references/troubleshooting.md) for the full table.
 
 **Do NOT announce preflight to the user.** Only speak if remediation is needed.
+
+## Step 0a — First-time install (only if `gwcli` is not on PATH)
+
+```bash
+npm install -g google-workspace-cli
+gwcli setup    # installs gws, creates config dirs, verifies versions
+```
+
+`gwcli setup` is idempotent — safe to re-run. Add `--json` for machine-readable output.
 
 ## Account Setup (first-time or new account)
 
@@ -49,12 +66,18 @@ If no profiles or user requests a new account:
 
 1. **Ask the user** for: account nickname (e.g. `work`, `personal`) and which services they need
 2. The user must provide an OAuth client secret JSON from Google Cloud Console
-3. Run:
+3. Run (omit `--scopes` to grant all supported services):
 ```bash
-gwcli profiles add <name> --client <path-to-client-secret.json> --scopes gmail,calendar,drive
+# All services (recommended for general agents)
+gwcli profiles add <name> --client <path-to-client-secret.json>
+
+# Or restrict scopes — pick from: gmail, calendar, drive, docs, sheets, keep, tasks
+gwcli profiles add <name> --client <path-to-client-secret.json> --scopes gmail,calendar,drive,docs,sheets,keep,tasks
 ```
 4. This opens a browser — the user authenticates. Tokens are stored locally.
 5. Set default if first profile: `gwcli profiles set-default <name>`
+
+> **Scopes are immutable on a profile.** To add a scope later, you must `profiles remove` then `profiles add` with the new scope set. `profiles auth` re-uses the existing scope set.
 
 **Profile selection priority:** `--profile` flag > `GWCLI_PROFILE` env > configured default.
 
@@ -75,7 +98,8 @@ gwcli gmail users drafts create --params '{"userId":"me"}' --body '<json>'
 ```bash
 gwcli calendar events list --params '{"calendarId":"primary","timeMin":"<ISO>","timeMax":"<ISO>"}'
 gwcli calendar events insert --params '{"calendarId":"primary"}' --body '<event-json>'
-gwcli calendar +agenda --days 7
+gwcli agenda --days 7                                    # native shortcut: events for next N days
+gwcli --profile work agenda --days 1                     # today's work events
 ```
 → Full reference: `@references/calendar.md`
 
@@ -108,28 +132,36 @@ gwcli tasks tasks patch --params '{"tasklist":"<id>","task":"<id>"}' --body '{"s
 ### Profile Management
 ```bash
 gwcli profiles list --format json
-gwcli profiles add <name> --client <path> [--scopes gmail,calendar,drive,keep,tasks]
-gwcli profiles remove <name>
+gwcli profiles add <name> --client <path>                                # all 7 services
+gwcli profiles add <name> --client <path> --scopes gmail,calendar,drive  # restricted
+gwcli profiles remove <name> --force      # --force is REQUIRED (non-interactive)
 gwcli profiles set-default <name>
-gwcli profiles auth <name>              # Re-authenticate
-gwcli doctor                            # Full health check
+gwcli profiles auth <name>                # re-authenticate (re-uses existing scopes)
+gwcli profiles status --format json --strict   # exits 2 if ANY profile unauthenticated
+gwcli doctor                              # full health check
+gwcli migrate --client <path>             # migrate v1 profiles to v2 layout
 ```
 → Full reference: `@references/profiles.md`
+
+## Concurrency
+
+- **Cross-profile parallelism is safe.** Each profile gets an isolated `GOOGLE_WORKSPACE_CLI_CONFIG_DIR` per spawn, so commands against different profiles can fan out freely.
+- **Same-profile commands must be serialized.** The file-keyring backend stores tokens as plain JSON; concurrent same-profile invocations can race during token refresh and corrupt the cache.
+- For bulk same-profile work, batch via field masks and pagination, not parallel spawns.
 
 ## Error Recovery
 
 On any command failure:
-1. Check exit code 2 → auth expired → `gwcli profiles auth <profile>`
-2. Check exit code 1 → gws printed error to stderr, inspect it
-3. Run `gwcli doctor` for systematic diagnosis
+1. Runtime exit `2` → auth expired → `gwcli profiles auth <profile>`
+2. Runtime exit `1` → gws printed error to stderr, inspect it
+3. Preflight exit `63`/`64` → run `gwcli setup` or add a profile (see Step 0)
+4. Run `gwcli doctor` for systematic diagnosis
 
 → Full reference: `@references/troubleshooting.md`
 
 ## Self-Improvement Protocol
 
-When encountering issues or discovering better patterns:
-1. Log the issue: append to `$SKILL_DIR/.feedback/issues.jsonl`
-2. If you fix the skill files, append to `$SKILL_DIR/.feedback/changes.jsonl`
+If you discover an inaccuracy in this skill (wrong command, missing flag, broken example), edit the relevant file directly using your file-editing tools. Keep changes minimal and run `gwcli doctor` to confirm the change doesn't break anything.
 
 → Full reference: `@references/self-improvement.md`
 
