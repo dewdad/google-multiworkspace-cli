@@ -39,9 +39,12 @@ function tryLocalBuild() {
   return null;
 }
 
-// Strategy 3: npx
+// Strategy 3: npx (slow path — clones from GitHub each invocation unless cached
+// by npx). Used only when neither a global install nor an alongside `dist/`
+// build is available. The package is not on the npm registry yet (see Issue 1
+// in plans/install-and-bootstrap-fixes), so the install vector is the repo URL.
 function tryNpx() {
-  return 'npx --yes google-workspace-cli';
+  return 'npx --yes github:dewdad/google-multiworkspace-cli';
 }
 
 const command = tryGlobal() || tryLocalBuild() || tryNpx();

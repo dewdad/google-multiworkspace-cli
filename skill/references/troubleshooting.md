@@ -12,7 +12,7 @@
 | `0` | Ready | proceed |
 | `63` | `gws` binary missing or below minimum version | `gwcli setup` |
 | `64` | No profiles configured | `gwcli profiles add <name> --client <path>` |
-| `127` (or shell "command not found") | `gwcli` itself not on PATH | `npm install -g google-workspace-cli`, then `gwcli setup` |
+| `127` (or shell "command not found") | `gwcli` itself not on PATH | `npm install -g github:dewdad/google-multiworkspace-cli`, then `gwcli setup` |
 
 ## Runtime exit codes (gws API passthrough)
 
@@ -94,8 +94,10 @@ $env:PATH -split ';' | Where-Object { $_ -match 'npm' }
 Rebuild gwcli:
 ```bash
 npm uninstall -g google-workspace-cli
-npm install -g google-workspace-cli
+npm install -g github:dewdad/google-multiworkspace-cli
 ```
+
+> The package self-identifies as `google-workspace-cli` (see `package.json`), so `npm uninstall -g google-workspace-cli` is correct even though the install vector is the GitHub URL.
 
 ### "I need to use a non-PATH gws binary"
 Edit `~/.config/gwcli/config.json` (Linux/Mac) or `%APPDATA%\gwcli\config.json` (Windows) and set `"gwsBinary"` to an absolute path. Useful for monorepo `node_modules/.bin/gws`, Docker-mounted binaries, or air-gapped installs.

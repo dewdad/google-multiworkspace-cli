@@ -26,8 +26,8 @@ The official `gws` CLI is excellent but ships with a single global credential st
 ## Installation
 
 ```bash
-# 1. Install gwcli
-npm install -g google-workspace-cli
+# 1. Install gwcli (from GitHub — requires git on PATH; npm runs `tsc` automatically via the `prepare` script)
+npm install -g github:dewdad/google-multiworkspace-cli
 
 # 2. Install gws + create config dirs (idempotent)
 gwcli setup
@@ -35,6 +35,8 @@ gwcli setup
 # 3. Verify
 gwcli doctor
 ```
+
+> **Not on the npm registry yet.** `gwcli` is installed directly from this GitHub repo. npm will clone, run `prepare` (`tsc`) to build `dist/`, then symlink the `gwcli` bin globally. Standard `npm update -g` re-pulls the default branch.
 
 `gwcli setup` runs `npm install -g @googleworkspace/cli` for you and verifies the version meets the minimum (`0.20.0`). Re-run any time to repair an install. Add `--gws-version <ver>` to pin a specific `gws` version.
 
@@ -197,7 +199,7 @@ gwcli drive files list --params '{"pageSize":20}' --format json
 | `gws binary not found`           | `gws` not installed / not on PATH            | `gwcli setup`, or set `gwsBinary` in config   |
 | `preflight` exits `63`           | `gws` missing/outdated                       | `gwcli setup`                                 |
 | `preflight` exits `64`           | No profiles configured                       | `gwcli profiles add <name> --client <path>`   |
-| `gwcli: command not found`       | `gwcli` not installed globally               | `npm install -g google-workspace-cli`         |
+| `gwcli: command not found`       | `gwcli` not installed globally               | `npm install -g github:dewdad/google-multiworkspace-cli` |
 | Auth errors during API call      | Profile token expired/revoked                | `gwcli profiles auth <name>`                  |
 
 For the full exit-code table (including `gws`'s 1/2 runtime codes), see [`skill/references/troubleshooting.md`](skill/references/troubleshooting.md).

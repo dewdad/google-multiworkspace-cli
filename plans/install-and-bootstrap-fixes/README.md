@@ -1,6 +1,15 @@
 # Plan: Install & Bootstrap Fixes
 
-## Status: Draft
+## Status: Implemented
+
+> **All 11 issues resolved.** Issues 2–10 landed in commit `7f43324` (full
+> code/docs sweep). Issue 11 (`package.json` upstream attribution) shipped
+> earlier in `4e848e3`. Issue 1 was the open release-decision item; we picked
+> **Option B (GitHub install)** — `npm install -g
+> github:dewdad/google-multiworkspace-cli` — and a `prepare: tsc` script in
+> `package.json` so the install builds `dist/` automatically. Switching to the
+> npm registry (Option A) is still on the table later; the install string is
+> the only thing that needs to change.
 
 ## Context
 

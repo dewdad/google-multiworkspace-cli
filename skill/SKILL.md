@@ -39,7 +39,7 @@ gwcli preflight --json
 | `0` | ready | proceed |
 | `63` | `gws` binary missing/outdated | `gwcli setup` |
 | `64` | no profiles configured | see "Account Setup" below |
-| `127` (or "command not found") | `gwcli` itself not installed | `npm install -g google-workspace-cli`, then re-run |
+| `127` (or "command not found") | `gwcli` itself not installed | `npm install -g github:dewdad/google-multiworkspace-cli`, then re-run |
 
 > **These are distinct from runtime exit codes** (1, 2) emitted by `gws` API calls. See [`references/troubleshooting.md`](references/troubleshooting.md) for the full table.
 
@@ -48,11 +48,13 @@ gwcli preflight --json
 ## Step 0a — First-time install (only if `gwcli` is not on PATH)
 
 ```bash
-npm install -g google-workspace-cli
+npm install -g github:dewdad/google-multiworkspace-cli
 gwcli setup    # installs gws, creates config dirs, verifies versions
 ```
 
 `gwcli setup` is idempotent — safe to re-run. Add `--json` for machine-readable output.
+
+> `gwcli` is distributed via GitHub (npm clones + builds on install — requires git on PATH). It is not currently published to the npm registry.
 
 ## Account Setup (first-time or new account)
 
