@@ -1,6 +1,30 @@
 # Keep Reference
 
-> **⚠ Enterprise/Workspace only.** The Google Keep API is gated to Google Workspace accounts with admin-level enablement of the Keep API. **Consumer Gmail accounts (`@gmail.com`) cannot use this API** — Keep on consumer accounts has no public API. Calls will fail with `insufficient_scope` or `403 PERMISSION_DENIED`. Verify the target profile is a Workspace account and that the admin has enabled the Keep API in the Google Cloud project before troubleshooting.
+> **⚠ Most users cannot use this API.** Google's official Keep API is Workspace-only and requires an admin to enable the Keep API in the Google Cloud project. Personal `@gmail.com` accounts — which are likely most `gwcli` users — will get `403 PERMISSION_DENIED` or `insufficient_scope` on every command in this reference. `gwcli` does not work around this; the error from `gws` is the signal that the API is not available for that account.
+>
+> **If you're on personal Gmail, skip the rest of this reference** and read [Consumer Keep alternatives](#consumer-keep-alternatives-personal-gmailcom) below. The Workspace API surface documented after that section will not work for you.
+
+## Consumer Keep alternatives (personal `@gmail.com`)
+
+There is no consumer Keep support in `gws`, and therefore none in `gwcli`. There is no roadmap to add it — Google has not exposed a public API for consumer Keep, and `gwcli` does not call Google APIs directly.
+
+For consumer Keep access, the community has built two unofficial paths:
+
+- **[KeepSidian](https://github.com/lc0rp/KeepSidian)** — Obsidian plugin, 2-way sync between Google Keep and an Obsidian vault. Best fit if you already use Obsidian.
+- **[Keep-It-Markdown (KIM)](https://github.com/djsudduth/keep-it-markdown)** — Python CLI, exports Keep notes to markdown files. Best fit outside Obsidian. KeepSidian's sync server is built on top of KIM.
+
+Read before installing either:
+
+- **Unofficial API.** Both projects rely on `gkeepapi`, which speaks Keep's internal mobile-client endpoints. Google does not document or support this surface; it can break, throttle, or be revoked without notice.
+- **Master-token auth, not OAuth.** Authentication uses a token captured from a Google Android sign-in flow — a separate trust decision from `gwcli`'s OAuth profiles. The token grants broad account access; treat it as a credential, not a session.
+- **Independent of `gwcli`.** No shared credentials, no shared profiles, no integration. These tools are mentioned here only because the official-API path is not available to consumer accounts.
+- **Account risk.** Some users have reported Google security challenges after using master-token tools. Evaluate the projects, their maintenance status, and your own risk tolerance before proceeding.
+
+**Agents:** do **not** install, configure, or invoke KeepSidian or KIM on the user's behalf. If a user asks for consumer Keep access, surface the links above with the caveats, then stop. These tools live outside `gwcli`'s trust and support boundary.
+
+---
+
+The remainder of this reference applies **only to Workspace profiles** where an admin has enabled the Keep API in the associated Google Cloud project.
 
 All Keep commands use the gws API passthrough pattern:
 ```bash

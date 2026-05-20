@@ -115,6 +115,8 @@ gwcli keep notes list --params '{"pageSize":25}'
 gwcli tasks tasks list --params '{"tasklist":"@default"}'
 ```
 
+> **Heads-up on Keep:** the Google Keep API is Workspace-only, so `gwcli keep …` returns `403 PERMISSION_DENIED` on personal `@gmail.com` accounts — the most common case. `gwcli` does not work around this; the `gws` error is the signal. For consumer Keep, see [`skill/references/keep.md`](skill/references/keep.md#consumer-keep-alternatives-personal-gmailcom) for unofficial community alternatives ([KeepSidian](https://github.com/lc0rp/KeepSidian) for Obsidian, [KIM](https://github.com/djsudduth/keep-it-markdown) standalone) — both live outside `gwcli`'s scope and trust boundary.
+
 ### Global flags
 
 ```bash
@@ -201,6 +203,7 @@ gwcli drive files list --params '{"pageSize":20}' --format json
 | `preflight` exits `64`           | No profiles configured                       | `gwcli profiles add <name> --client <path>`   |
 | `gwcli: command not found`       | `gwcli` not installed globally               | `npm install -g github:dewdad/google-multiworkspace-cli` |
 | Auth errors during API call      | Profile token expired/revoked                | `gwcli profiles auth <name>`                  |
+| `keep …` → `403 PERMISSION_DENIED` | Personal `@gmail.com` (Keep API is Workspace-only) | Expected on consumer accounts. See [`skill/references/keep.md`](skill/references/keep.md#consumer-keep-alternatives-personal-gmailcom) for unofficial community alternatives |
 
 For the full exit-code table (including `gws`'s 1/2 runtime codes), see [`skill/references/troubleshooting.md`](skill/references/troubleshooting.md).
 
