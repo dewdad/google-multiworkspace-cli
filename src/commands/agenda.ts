@@ -48,11 +48,10 @@ export function runAgenda(options: AgendaOptions): never {
     JSON.stringify(params),
   ];
 
-  // Reduce response payload to the fields agents actually use for "what's on my calendar".
-  args.push(
-    '--fields',
-    'items(id,summary,start,end,location,attendees(email,responseStatus),htmlLink)'
-  );
+  // NOTE: gws 0.22.x removed the `--fields` response mask; field filtering is
+  // expected to happen client-side. We forward the full response and let the
+  // caller (agent or human) trim. Re-introduce a mask only after confirming
+  // the flag exists in the active gws version (`gws calendar events list --help`).
 
   if (options.formatFlag) {
     args.push('--format', options.formatFlag);

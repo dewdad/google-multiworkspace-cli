@@ -36,10 +36,14 @@ export function validateProfileName(name: string): void {
   }
 
   if (!PROFILE_NAME_REGEX.test(name)) {
+    const sanitized = sanitizeProfileName(name);
+    const suggestion = sanitized && sanitized !== name && PROFILE_NAME_REGEX.test(sanitized)
+      ? `Try '${sanitized}' instead. Rules: start with lowercase letter, [a-z0-9-]{1,63}.`
+      : 'Profile names must: start with a lowercase letter, contain only lowercase letters/digits/hyphens, and be 1-63 characters.';
     throw new GwcliError(
       `Invalid profile name '${name}'.`,
       'INVALID_PROFILE_NAME',
-      'Profile names must: start with a lowercase letter, contain only lowercase letters/digits/hyphens, and be 1-63 characters.'
+      suggestion
     );
   }
 
@@ -63,4 +67,28 @@ export function isValidProfileName(name: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Best-effort sanitization to suggest a valid profile name from common
+ * mistakes (uppercase, dots, underscores, leading digits/hyphens).
+ *
+ * Returns null when no reasonable fix can be derived.
+ */
+export function sanitizeProfileName(name: string): string | null {
+  if (!name) return null;
+  let s = name.toLowerCase();
+  // Replace common separators with hyphens
+  s = s.replace(/[._\s/\\]+/g, '-');
+  // Strip any character outside [a-z0-9-]
+  s = s.replace(/[^a-z0-9-]/g, '');
+  // Collapse runs of hyphens and trim leading/trailing hyphens
+  s = s.replace(/-+/g, '-').replace(/^-+|-+$/g, '');
+  // Must start with a lowercase letter
+  if (!/^[a-z]/.test(s)) {
+    s = s.replace(/^[^a-z]+/, '');
+  }
+  // Cap at 63 chars
+  if (s.length > 63) s = s.slice(0, 63).replace(/-+$/, '');
+  return s.length > 0 ? s : null;
 }

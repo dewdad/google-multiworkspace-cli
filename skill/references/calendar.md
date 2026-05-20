@@ -3,11 +3,14 @@
 ## Quick Commands (shortcuts)
 
 ```bash
-# Agenda view (next N days) — human-friendly shortcut
-gwcli calendar +agenda --days 7
-gwcli calendar +agenda --days 1                    # Today only
-gwcli --profile work calendar +agenda --days 3     # Work calendar
+# Native gwcli shortcut (recommended — works regardless of gws version)
+gwcli agenda --days 7
+gwcli agenda --days 1                              # Today only
+gwcli --profile work agenda --days 3               # Work calendar (next 3 days)
+gwcli --profile work agenda --calendar team@company.com --days 7
 ```
+
+> The native `gwcli agenda` command composes a `calendar.events.list` call internally; it does **not** rely on a gws-side `+agenda` shortcut and works on every supported gws version.
 
 ## API Passthrough Commands
 
@@ -96,7 +99,7 @@ Use `date` instead of `dateTime`:
 
 ### "What's on my calendar today?"
 ```bash
-gwcli calendar +agenda --days 1
+gwcli agenda --days 1
 ```
 
 ### "Am I free at 3pm tomorrow?"

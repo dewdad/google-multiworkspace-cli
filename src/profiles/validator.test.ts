@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateProfileName, isValidProfileName } from './validator.js';
+import { validateProfileName, isValidProfileName, sanitizeProfileName } from './validator.js';
 
 describe('validateProfileName', () => {
   it('accepts valid names', () => {
@@ -39,6 +39,28 @@ describe('validateProfileName', () => {
     expect(() => validateProfileName('my.profile')).toThrow('Invalid profile name');
   });
 
+  it('suggests a sanitized alternative for dotted names (Issue 10)', () => {
+    try {
+      validateProfileName('avital.bennatan');
+      throw new Error('expected to throw');
+    } catch (err) {
+      const e = err as { suggestion?: string; code?: string };
+      expect(e.code).toBe('INVALID_PROFILE_NAME');
+      expect(e.suggestion ?? '').toMatch(/Try 'avital-bennatan'/);
+    }
+  });
+
+  it('suggests a sanitized alternative for uppercase names', () => {
+    try {
+      validateProfileName('MyProfile');
+      throw new Error('expected to throw');
+    } catch (err) {
+      const e = err as { suggestion?: string; code?: string };
+      expect(e.code).toBe('INVALID_PROFILE_NAME');
+      expect(e.suggestion ?? '').toMatch(/Try 'myprofile'/);
+    }
+  });
+
   it('rejects path traversal', () => {
     expect(() => validateProfileName('../evil')).toThrow();
   });
@@ -59,5 +81,41 @@ describe('isValidProfileName', () => {
     expect(isValidProfileName('')).toBe(false);
     expect(isValidProfileName('default')).toBe(false);
     expect(isValidProfileName('UPPER')).toBe(false);
+  });
+});
+
+describe('sanitizeProfileName', () => {
+  it('replaces dots with hyphens', () => {
+    expect(sanitizeProfileName('avital.bennatan')).toBe('avital-bennatan');
+  });
+
+  it('lowercases', () => {
+    expect(sanitizeProfileName('MyProfile')).toBe('myprofile');
+  });
+
+  it('replaces underscores and whitespace with hyphens', () => {
+    expect(sanitizeProfileName('my_profile')).toBe('my-profile');
+    expect(sanitizeProfileName('my profile')).toBe('my-profile');
+  });
+
+  it('strips disallowed characters', () => {
+    expect(sanitizeProfileName('foo@bar!baz')).toBe('foobarbaz');
+  });
+
+  it('strips leading non-letters', () => {
+    expect(sanitizeProfileName('123abc')).toBe('abc');
+    expect(sanitizeProfileName('-abc')).toBe('abc');
+  });
+
+  it('caps at 63 characters', () => {
+    const long = 'a' + 'b'.repeat(100);
+    const out = sanitizeProfileName(long)!;
+    expect(out.length).toBeLessThanOrEqual(63);
+  });
+
+  it('returns null when nothing salvageable', () => {
+    expect(sanitizeProfileName('!!!')).toBeNull();
+    expect(sanitizeProfileName('')).toBeNull();
+    expect(sanitizeProfileName('123')).toBeNull();
   });
 });

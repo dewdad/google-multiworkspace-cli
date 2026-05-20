@@ -123,3 +123,56 @@ export function runGwsAuthStatus(profileName: string): {
 
   return { exitCode: result.exitCode, status };
 }
+
+/**
+ * Resolve the Google identity (email) bound to a profile by querying gws.
+ *
+ * Tries scope-appropriate endpoints in order so it works for any profile that
+ * has at least one of: gmail, calendar. Returns null if no endpoint succeeds.
+ */
+export function fetchProfileEmail(profileName: string): string | null {
+  // Strategy 1: gmail.users.getProfile — most common, returns emailAddress.
+  const gmail = runGws({
+    profileName,
+    args: ['gmail', 'users', 'getProfile', '--params', '{"userId":"me"}'],
+    capture: true,
+  });
+  if (gmail.exitCode === 0 && gmail.stdout) {
+    const email = extractEmailFromJson(gmail.stdout);
+    if (email) return email;
+  }
+
+  // Strategy 2: calendar.calendarList.get('primary') — id is the user's email
+  // for primary on consumer accounts and Workspace.
+  const cal = runGws({
+    profileName,
+    args: ['calendar', 'calendarList', 'get', '--params', '{"calendarId":"primary"}'],
+    capture: true,
+  });
+  if (cal.exitCode === 0 && cal.stdout) {
+    const email = extractEmailFromJson(cal.stdout);
+    if (email) return email;
+  }
+
+  return null;
+}
+
+function extractEmailFromJson(raw: string): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object') return null;
+  const obj = parsed as Record<string, unknown>;
+  // gmail.users.getProfile shape
+  if (typeof obj['emailAddress'] === 'string') {
+    return obj['emailAddress'] as string;
+  }
+  // calendar.calendarList primary shape — `id` is the email for primary.
+  if (typeof obj['id'] === 'string' && (obj['id'] as string).includes('@')) {
+    return obj['id'] as string;
+  }
+  return null;
+}

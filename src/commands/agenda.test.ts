@@ -87,19 +87,13 @@ describe('runAgenda', () => {
     expect(params.calendarId).toBe('team@company.com');
   });
 
-  it('includes a --fields mask to reduce response payload', () => {
+  it('does NOT pass --fields (gws 0.22.x removed the response mask flag)', () => {
     expect(() =>
       runAgenda({ days: 1, calendarId: 'primary', maxResults: 10 })
     ).toThrow('__exit_0__');
 
     const call = vi.mocked(runGws).mock.calls[0]![0];
-    expect(call.args).toContain('--fields');
-    const fieldsIdx = call.args.indexOf('--fields');
-    const fields = call.args[fieldsIdx + 1]!;
-    expect(fields).toContain('items(');
-    expect(fields).toContain('summary');
-    expect(fields).toContain('start');
-    expect(fields).toContain('end');
+    expect(call.args).not.toContain('--fields');
   });
 
   it('forwards --format flag when provided', () => {

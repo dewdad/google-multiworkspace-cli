@@ -1,5 +1,6 @@
 import { Command } from 'commander';
-import { addProfile, removeProfile, listAllProfiles, renameProfile, setDefaultProfile } from '../profiles/index.js';
+import { addProfile, removeProfile, listAllProfiles, renameProfile, setDefaultProfile, refreshProfileEmail } from '../profiles/index.js';
+import { getProfileMeta } from '../profiles/config.js';
 import { runGwsAuthLogin, runGwsAuthStatus } from '../gws/runner.js';
 import { findGwsBinary } from '../gws/binary.js';
 import { formatOutput } from '../lib/output.js';
@@ -78,8 +79,28 @@ export function registerProfilesCommands(program: Command): void {
           const result = runGwsAuthLogin(name, scopes);
           if (result.exitCode === 0) {
             console.log(`Profile '${name}' authenticated successfully.`);
+            // Best-effort: resolve and persist the bound Google identity.
+            try {
+              const email = refreshProfileEmail(name);
+              if (email) {
+                console.log(`Identity: ${email}`);
+              }
+            } catch {
+              // Non-fatal — auth succeeded.
+            }
           } else {
-            console.error(`Authentication failed. Run later: gwcli profiles auth ${name}`);
+            // Auth failed AFTER scaffolding — roll back to avoid leaving an
+            // orphaned profile directory that blocks retries with the same
+            // name (Issue 3).
+            console.error(`Authentication failed. Rolling back profile '${name}'.`);
+            try {
+              removeProfile(name);
+            } catch {
+              // Last-ditch: leave breadcrumbs so the user can clean up manually.
+              console.error(`(Could not auto-remove. Run: gwcli profiles remove ${name} --force)`);
+            }
+            console.error(`Re-run: gwcli profiles add ${name} --client <path>`);
+            process.exit(result.exitCode || 1);
           }
         } else {
           console.log(`Skipping auth. Run later: gwcli profiles auth ${name}`);
@@ -167,15 +188,54 @@ export function registerProfilesCommands(program: Command): void {
   profiles
     .command('auth <name>')
     .description('(Re-)authenticate a profile')
-    .option('--scopes <list>', 'Comma-separated service names')
+    .option('--scopes <list>', 'Comma-separated service names (defaults to the profile\'s stored scopes)')
     .action((name: string, options) => {
       try {
         findGwsBinary();
-        const scopes = options.scopes?.split(',').map((s: string) => s.trim());
+
+        // Resolve scopes: explicit --scopes wins, else fall back to the
+        // profile's stored scopes. This bypasses the gws interactive scope
+        // picker (which hangs in non-TTY environments — CI, agent spawns, etc.).
+        let scopes: string[] | undefined = options.scopes
+          ?.split(',')
+          .map((s: string) => s.trim())
+          .filter(Boolean);
+
+        if (!scopes || scopes.length === 0) {
+          const meta = getProfileMeta(name);
+          if (meta && meta.scopes && meta.scopes.length > 0) {
+            scopes = meta.scopes;
+          }
+        }
+
+        // Non-TTY guard: if we still have no scopes AND stdin isn't a TTY,
+        // gws will render an interactive picker and hang forever. Refuse early
+        // with a clear remediation hint instead of silently deadlocking.
+        if ((!scopes || scopes.length === 0) && !process.stdin.isTTY) {
+          throw new GwcliError(
+            `Cannot authenticate profile '${name}' in a non-interactive environment without explicit scopes.`,
+            'AUTH_NEEDS_SCOPES_NON_TTY',
+            `Re-run with --scopes, e.g.:\n  gwcli profiles auth ${name} --scopes gmail,calendar,drive,docs,sheets,tasks`
+          );
+        }
+
         console.log(`Authenticating profile '${name}'...`);
+        if (scopes && scopes.length > 0) {
+          console.log(`Using scopes: ${scopes.join(', ')}`);
+        }
         const result = runGwsAuthLogin(name, scopes);
         if (result.exitCode === 0) {
           console.log(`Profile '${name}' authenticated successfully.`);
+          // Best-effort: persist the resolved Google identity so `profiles list`
+          // / `profiles status` show a real email instead of `null`.
+          try {
+            const email = refreshProfileEmail(name);
+            if (email) {
+              console.log(`Identity: ${email}`);
+            }
+          } catch {
+            // Non-fatal: auth succeeded, email backfill is a nice-to-have.
+          }
         } else {
           console.error(`Authentication failed (exit code: ${result.exitCode}).`);
           process.exit(result.exitCode);
@@ -208,13 +268,32 @@ export function registerProfilesCommands(program: Command): void {
           (!explicitFormat && !process.stdout.isTTY);
 
         if (name) {
+          // Single-profile status: unified shape — same per-profile keys as
+          // `profiles list`, plus an optional `details` slot for the raw gws
+          // auth status (paths, auth_method, etc.).
+          const allEntries = listAllProfiles({ backfillEmail: true });
+          const entry = allEntries.find(e => e.name === name);
           const { exitCode, status } = runGwsAuthStatus(name);
-          if (status) {
+
+          if (entry) {
+            const unified = {
+              name: entry.name,
+              displayName: entry.displayName,
+              email: entry.email,
+              isDefault: entry.isDefault,
+              authenticated: entry.authenticated,
+              scopes: entry.scopes,
+              lastUsed: entry.lastUsed,
+              ...(status ? { details: status } : {}),
+            };
             if (wantJson) {
-              console.log(JSON.stringify({ profile: name, status }, null, 2));
+              console.log(JSON.stringify(unified, null, 2));
             } else {
-              console.log(JSON.stringify(status, null, 2));
+              console.log(JSON.stringify(unified, null, 2));
             }
+          } else if (status) {
+            // Profile dir is gone but gws still has state — surface raw gws output.
+            console.log(JSON.stringify({ name, details: status }, null, 2));
           }
           if (exitCode !== 0) {
             process.exit(exitCode);
@@ -222,28 +301,14 @@ export function registerProfilesCommands(program: Command): void {
           return;
         }
 
-        // Bulk mode: status for all profiles
-        const entries = listAllProfiles();
+        // Bulk mode: status for all profiles. Returns the same array shape
+        // that `profiles list --format json` produces, so jq queries are
+        // portable between the two commands.
+        const entries = listAllProfiles({ backfillEmail: true });
         const anyUnauthenticated = entries.some(e => !e.authenticated);
 
         if (wantJson) {
-          console.log(
-            JSON.stringify(
-              {
-                profiles: entries.map(e => ({
-                  name: e.name,
-                  email: e.email,
-                  authenticated: e.authenticated,
-                  isDefault: e.isDefault,
-                  scopes: e.scopes,
-                })),
-                allAuthenticated: !anyUnauthenticated,
-                count: entries.length,
-              },
-              null,
-              2
-            )
-          );
+          console.log(JSON.stringify(entries, null, 2));
         } else {
           for (const entry of entries) {
             const marker = entry.isDefault ? '*' : ' ';

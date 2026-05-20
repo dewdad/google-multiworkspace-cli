@@ -27,7 +27,9 @@ Returns:
 gwcli profiles add <name> --client <path-to-oauth-json> [--scopes gmail,calendar,drive,docs,sheets,keep,tasks] [--display-name "My Work"]
 ```
 
-**Required**: OAuth client secret JSON from Google Cloud Console.
+**Required**: OAuth client secret JSON from Google Cloud Console — see [`oauth-bootstrap.md`](oauth-bootstrap.md). Google's "Download JSON" modal is one-shot; capture the file in a real browser, not headless automation.
+
+If the OAuth flow fails (timeout, browser closed, consent declined), `profiles add` rolls back automatically — the partial profile directory is removed so you can retry with the same name.
 
 **Available scopes**: `gmail`, `calendar`, `drive`, `docs`, `sheets`, `keep`, `tasks`  
 Default: `gmail,calendar,drive,docs,sheets,keep,tasks`
@@ -52,11 +54,14 @@ gwcli profiles set-default <name>
 
 ### Re-authenticate (refresh expired tokens)
 ```bash
-gwcli profiles auth <name>
+gwcli profiles auth <name>                       # uses the profile's stored scopes
+gwcli profiles auth <name> --scopes gmail,calendar  # override (still subject to immutability rule below)
 ```
 Opens browser for fresh OAuth flow. Use when tokens expire.
 
 > **`profiles auth` reuses the existing scope set.** It does **not** prompt for new scopes. To add a scope, you must `profiles remove --force` then `profiles add` with the new scope list.
+
+> **Non-TTY behavior.** `profiles auth` always passes `--services` to the underlying gws so the interactive scope picker is bypassed. In CI / agent / `Start-Process`-style environments where stdin is not a TTY, the command refuses to run if no stored or `--scopes` value is available — it would otherwise hang forever waiting for keystrokes that never arrive.
 
 ### Check Auth Status
 ```bash

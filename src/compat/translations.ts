@@ -95,6 +95,12 @@ const TRANSLATIONS: Record<string, Translation> = {
 /**
  * Check if args match a deprecated v1 command pattern and translate if so.
  * Returns null if no translation applies (pass through to gws as-is).
+ *
+ * Disambiguation: a v1 two-word command ("calendar events") collides with the
+ * native three-word gws form ("calendar events list/get/insert/..."). To avoid
+ * spuriously deprecating valid native calls, we only translate when the third
+ * positional arg is missing or is a flag (starts with '-'). A non-flag third
+ * arg means the user typed a real gws method — pass through untouched.
  */
 export function tryTranslateCompat(gwsArgs: string[]): string[] | null {
   if (gwsArgs.length < 2) return null;
@@ -103,6 +109,13 @@ export function tryTranslateCompat(gwsArgs: string[]): string[] | null {
   const translation = TRANSLATIONS[key];
 
   if (!translation) return null;
+
+  const third = gwsArgs[2];
+  if (third !== undefined && !third.startsWith('-')) {
+    // User supplied a real third positional (e.g. "list", "get") — this is
+    // native gws syntax, not the deprecated v1 alias. Pass through.
+    return null;
+  }
 
   // Remaining args after the two-word command
   const remainingArgs = gwsArgs.slice(2);

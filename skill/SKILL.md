@@ -65,7 +65,7 @@ gwcli profiles list --format json
 If no profiles or user requests a new account:
 
 1. **Ask the user** for: account nickname (e.g. `work`, `personal`) and which services they need
-2. The user must provide an OAuth client secret JSON from Google Cloud Console
+2. The user must provide an OAuth client secret JSON from Google Cloud Console — see `@references/oauth-bootstrap.md` (Google deprecated post-creation secret retrieval; one-shot capture).
 3. Run (omit `--scopes` to grant all supported services):
 ```bash
 # All services (recommended for general agents)
@@ -174,5 +174,6 @@ If you discover an inaccuracy in this skill (wrong command, missing flag, broken
 - **Notes and Keep**: Load `@references/keep.md`
 - **Task management**: Load `@references/tasks.md`
 - **First-time setup**: Load `@references/profiles.md`
+- **OAuth client creation**: Load `@references/oauth-bootstrap.md`
 - **Debugging**: Load `@references/troubleshooting.md`
 - **Never load all references at once** — load only what's needed for the current task

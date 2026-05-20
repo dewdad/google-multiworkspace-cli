@@ -172,6 +172,21 @@ function handlePassthrough(rawArgs: string[]): void {
     const translated = tryTranslateCompat(gwsArgs);
     const effectiveArgs = translated ?? gwsArgs;
 
+    // Pre-flight: Keep API is gated to Workspace accounts. Warn (don't block)
+    // when a `keep ...` call goes through a consumer @gmail.com profile so the
+    // user gets a clear hint before reading a raw `403 PERMISSION_DENIED`
+    // from gws. See references/keep.md (Issue 8).
+    if (effectiveArgs[0] === 'keep') {
+      const email = profile.meta?.email;
+      if (email && email.toLowerCase().endsWith('@gmail.com')) {
+        process.stderr.write(
+          `⚠ Profile '${profile.name}' is a consumer @gmail.com account. ` +
+          `The Google Keep API is gated to Workspace accounts and will ` +
+          `return 403 on every request. See references/keep.md.\n`
+        );
+      }
+    }
+
     // Inject --format into gws args if specified by gwcli and not already in gws args
     const finalGwsArgs = [...effectiveArgs];
     if (formatFlag && !effectiveArgs.includes('--format') && !effectiveArgs.includes('-f')) {

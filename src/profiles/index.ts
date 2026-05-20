@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, copyFileSync, rmSync, renameSync } from 'fs';
 import { join, resolve } from 'path';
 import { validateProfileName } from './validator.js';
+import { fetchProfileEmail } from '../gws/runner.js';
 import {
   getProfileDir,
   getProfileGwsDir,
@@ -115,7 +116,12 @@ export interface ProfileListEntry {
   authenticated: boolean;
 }
 
-export function listAllProfiles(): ProfileListEntry[] {
+export interface ListProfilesOptions {
+  /** If true, attempt to backfill missing emails by hitting gws (slow but accurate). */
+  backfillEmail?: boolean;
+}
+
+export function listAllProfiles(options: ListProfilesOptions = {}): ProfileListEntry[] {
   const names = listProfileNames();
   const config = getGlobalConfig();
 
@@ -125,13 +131,26 @@ export function listAllProfiles(): ProfileListEntry[] {
     const hasCredentials = existsSync(join(gwsDir, 'credentials.enc')) ||
                            existsSync(join(gwsDir, 'credentials.json'));
 
+    let email = meta?.email ?? null;
+
+    // Lazy backfill: opt-in (off by default — `gwcli profiles list` shouldn't
+    // make N network calls). Callers like `profiles status` request it
+    // explicitly when accuracy matters.
+    if (!email && hasCredentials && options.backfillEmail) {
+      try {
+        email = refreshProfileEmail(name);
+      } catch {
+        // Best-effort — ignore network/auth errors during backfill.
+      }
+    }
+
     return {
       name,
       displayName: meta?.displayName ?? name,
-      email: meta?.email ?? null,
+      email,
       isDefault: name === config.defaultProfile,
       lastUsed: meta?.lastUsed ?? null,
-      scopes: meta?.scopes ?? [],
+      scopes: (meta?.scopes ?? []).slice(),
       authenticated: hasCredentials,
     };
   });
@@ -200,4 +219,56 @@ export function updateLastUsed(name: string): void {
     meta.lastUsed = new Date().toISOString();
     saveProfileMeta(name, meta);
   }
+}
+
+// ─── Refresh Email (post-auth identity backfill) ─────────────────────────────
+
+/**
+ * Resolve and persist the Google identity (email) bound to a profile.
+ *
+ * Called after a successful `auth login` and lazily by `profiles list` /
+ * `profiles status` when the stored email is null. Best-effort — silently
+ * returns null if no endpoint responds (e.g. revoked token, network down).
+ *
+ * If the resolved email indicates a consumer Gmail account (`@gmail.com`)
+ * AND the profile has the `keep` scope, `keep` is removed from the stored
+ * scope list since the Keep API is server-side gated to Workspace accounts
+ * (see Issue 8 / `references/keep.md`). A warning is emitted on stderr.
+ */
+export function refreshProfileEmail(name: string): string | null {
+  const email: string | null = fetchProfileEmail(name);
+  if (!email) return null;
+
+  const meta = getProfileMeta(name);
+  if (!meta) return email;
+
+  let dirty = false;
+
+  if (meta.email !== email) {
+    meta.email = email;
+    dirty = true;
+  }
+
+  // Strip the keep scope on consumer @gmail.com accounts — the Keep API
+  // returns 403 on every call for these, so leaving it in the consent /
+  // stored-scope set is misleading.
+  if (
+    email.toLowerCase().endsWith('@gmail.com') &&
+    Array.isArray(meta.scopes) &&
+    meta.scopes.includes('keep')
+  ) {
+    meta.scopes = meta.scopes.filter(s => s !== 'keep');
+    dirty = true;
+    process.stderr.write(
+      `⚠ Removed 'keep' scope from profile '${name}' (${email}) — the ` +
+      `Google Keep API is gated to Workspace accounts and always returns ` +
+      `403 on @gmail.com identities. See references/keep.md.\n`
+    );
+  }
+
+  if (dirty) {
+    saveProfileMeta(name, meta);
+  }
+
+  return email;
 }

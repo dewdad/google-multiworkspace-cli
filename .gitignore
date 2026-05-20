@@ -9,6 +9,9 @@ client_secrets/
 # Skill self-improvement feedback (local only, not committed)
 skill/.feedback/
 
+# Local browser-automation debug logs
+.playwright-cli/
+
 # Engram local cache
 .engram/
 
