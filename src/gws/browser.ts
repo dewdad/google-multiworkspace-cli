@@ -1,4 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 /**
  * Cross-platform browser launcher with optional incognito / private-mode
@@ -33,60 +36,109 @@ export interface OpenInBrowserOptions {
 }
 
 /**
- * Map of Windows ProgId prefix → incognito CLI flag for known browsers.
+ * Browser family — determines whether we need to pair the incognito flag with
+ * a unique `--user-data-dir` to force a fresh isolated session.
+ *
+ * Why this matters:
+ *   On Edge/Chrome/Brave/Vivaldi, `--inprivate`/`--incognito` alone joins an
+ *   *existing* private session if one is already open. Two consecutive
+ *   `gwcli profiles auth` invocations with `--inprivate` would land in the
+ *   same private window, where the previous account is still signed in →
+ *   Google auto-completes consent against the wrong account. Pairing with
+ *   `--user-data-dir=<unique-tmp>` forces an isolated browser process per
+ *   launch, guaranteeing the account chooser starts blank every time.
+ *
+ *   Firefox-family browsers handle `--private-window` correctly without this
+ *   workaround; each call opens a fresh private window with no shared state.
+ */
+type BrowserFamily = 'chromium' | 'firefox' | 'opera' | 'unknown';
+
+interface BrowserSpec {
+  flag: string;
+  family: BrowserFamily;
+}
+
+/**
+ * Map of Windows ProgId prefix → browser spec for known browsers.
  * Firefox uses suffixed ProgIds (e.g. `FirefoxURL-308046B0AF4A39CB`), hence
  * the prefix-match in {@link mapProgIdToIncognitoFlag}.
  */
-const WINDOWS_PROGID_TO_FLAG: Array<[string, string]> = [
-  ['MSEdgeHTM', '--inprivate'],
-  ['ChromeHTML', '--incognito'],
-  ['BraveHTML', '--incognito'],
-  ['VivaldiHTM', '--incognito'],
-  ['OperaStable', '--private'],
-  ['FirefoxURL', '--private-window'],
-  ['LibreWolfURL', '--private-window'],
-  ['WaterfoxURL', '--private-window'],
+const WINDOWS_PROGID_TO_SPEC: Array<[string, BrowserSpec]> = [
+  ['MSEdgeHTM', { flag: '--inprivate', family: 'chromium' }],
+  ['ChromeHTML', { flag: '--incognito', family: 'chromium' }],
+  ['BraveHTML', { flag: '--incognito', family: 'chromium' }],
+  ['VivaldiHTM', { flag: '--incognito', family: 'chromium' }],
+  ['OperaStable', { flag: '--private', family: 'opera' }],
+  ['FirefoxURL', { flag: '--private-window', family: 'firefox' }],
+  ['LibreWolfURL', { flag: '--private-window', family: 'firefox' }],
+  ['WaterfoxURL', { flag: '--private-window', family: 'firefox' }],
 ];
 
 /**
- * macOS app bundles → (CLI flag for incognito).
+ * macOS app bundles → browser spec.
  * Used with `open -na "<App>" --args <flag> <url>`.
  */
-const MAC_APP_TO_FLAG: Array<[string, string]> = [
-  ['Microsoft Edge', '--inprivate'],
-  ['Google Chrome', '--incognito'],
-  ['Brave Browser', '--incognito'],
-  ['Vivaldi', '--incognito'],
-  ['Firefox', '--private-window'],
-  ['LibreWolf', '--private-window'],
+const MAC_APP_TO_SPEC: Array<[string, BrowserSpec]> = [
+  ['Microsoft Edge', { flag: '--inprivate', family: 'chromium' }],
+  ['Google Chrome', { flag: '--incognito', family: 'chromium' }],
+  ['Brave Browser', { flag: '--incognito', family: 'chromium' }],
+  ['Vivaldi', { flag: '--incognito', family: 'chromium' }],
+  ['Firefox', { flag: '--private-window', family: 'firefox' }],
+  ['LibreWolf', { flag: '--private-window', family: 'firefox' }],
 ];
 
 /**
- * Linux executable name → incognito flag. Resolved via `xdg-mime query` then
- * `xdg-settings get` as a fallback.
+ * Linux executable name → browser spec. Resolved via `xdg-mime query`.
  */
-const LINUX_EXE_TO_FLAG: Array<[string, string]> = [
-  ['microsoft-edge', '--inprivate'],
-  ['microsoft-edge-stable', '--inprivate'],
-  ['google-chrome', '--incognito'],
-  ['google-chrome-stable', '--incognito'],
-  ['chromium', '--incognito'],
-  ['chromium-browser', '--incognito'],
-  ['brave-browser', '--incognito'],
-  ['vivaldi', '--incognito'],
-  ['firefox', '--private-window'],
-  ['librewolf', '--private-window'],
+const LINUX_EXE_TO_SPEC: Array<[string, BrowserSpec]> = [
+  ['microsoft-edge', { flag: '--inprivate', family: 'chromium' }],
+  ['microsoft-edge-stable', { flag: '--inprivate', family: 'chromium' }],
+  ['google-chrome', { flag: '--incognito', family: 'chromium' }],
+  ['google-chrome-stable', { flag: '--incognito', family: 'chromium' }],
+  ['chromium', { flag: '--incognito', family: 'chromium' }],
+  ['chromium-browser', { flag: '--incognito', family: 'chromium' }],
+  ['brave-browser', { flag: '--incognito', family: 'chromium' }],
+  ['vivaldi', { flag: '--incognito', family: 'chromium' }],
+  ['firefox', { flag: '--private-window', family: 'firefox' }],
+  ['librewolf', { flag: '--private-window', family: 'firefox' }],
 ];
 
 /**
- * Resolve the incognito flag for a Windows ProgId via prefix match.
- * Returns null for unknown browsers.
+ * Build the per-launch isolation flags for a given browser family. For
+ * Chromium-family browsers, returns `['--user-data-dir=<unique-tmp>',
+ * '--no-first-run', '--no-default-browser-check']` so each invocation gets a
+ * fresh isolated session and doesn't show first-run / default-browser prompts.
+ *
+ * Returns an empty array for browsers that don't need the workaround
+ * (Firefox/LibreWolf/Waterfox handle `--private-window` correctly already).
  */
-export function mapProgIdToIncognitoFlag(progId: string): string | null {
-  for (const [prefix, flag] of WINDOWS_PROGID_TO_FLAG) {
-    if (progId.startsWith(prefix)) return flag;
+export function buildIsolationArgs(family: BrowserFamily): string[] {
+  if (family !== 'chromium') return [];
+  const userDataDir = mkdtempSync(join(tmpdir(), 'gwcli-oauth-'));
+  return [
+    `--user-data-dir=${userDataDir}`,
+    '--no-first-run',
+    '--no-default-browser-check',
+  ];
+}
+
+/**
+ * Resolve the browser spec (incognito flag + family) for a Windows ProgId via
+ * prefix match. Returns null for unknown browsers.
+ */
+export function mapProgIdToBrowserSpec(progId: string): BrowserSpec | null {
+  for (const [prefix, spec] of WINDOWS_PROGID_TO_SPEC) {
+    if (progId.startsWith(prefix)) return spec;
   }
   return null;
+}
+
+/**
+ * Backwards-compatible thin wrapper that returns just the flag.
+ * Retained because tests still cover ProgId → flag mapping directly.
+ */
+export function mapProgIdToIncognitoFlag(progId: string): string | null {
+  return mapProgIdToBrowserSpec(progId)?.flag ?? null;
 }
 
 /**
@@ -147,20 +199,24 @@ export function readWindowsBrowserExePath(progId: string): string | null {
 
 /**
  * Produce an incognito-mode launch command for the user's default browser on
- * Windows. Returns null if detection fails or the browser isn't on the known
- * list.
+ * Windows. For Chromium-family browsers, pairs the incognito flag with a
+ * unique `--user-data-dir` so each launch gets a fresh isolated session.
+ * Returns null if detection fails or the browser isn't on the known list.
  */
 export function detectWindowsIncognitoCommand(url: string): BrowserCommand | null {
   const progId = readWindowsDefaultBrowserProgId();
   if (!progId) return null;
 
-  const flag = mapProgIdToIncognitoFlag(progId);
-  if (!flag) return null;
+  const spec = mapProgIdToBrowserSpec(progId);
+  if (!spec) return null;
 
   const exe = readWindowsBrowserExePath(progId);
   if (!exe) return null;
 
-  return { command: exe, args: [flag, url] };
+  return {
+    command: exe,
+    args: [spec.flag, ...buildIsolationArgs(spec.family), url],
+  };
 }
 
 /**
@@ -175,8 +231,13 @@ export function detectMacIncognitoCommand(url: string): BrowserCommand | null {
   // We can't easily probe app existence without `osascript` or fs lookups in
   // /Applications, but `open -na` will fail cleanly if the app is missing,
   // so we try the most likely match first based on common defaults.
-  const [app, flag] = MAC_APP_TO_FLAG[0]!;
-  return { command: 'open', args: ['-na', app, '--args', flag, url] };
+  const entry = MAC_APP_TO_SPEC[0];
+  if (!entry) return null;
+  const [app, spec] = entry;
+  return {
+    command: 'open',
+    args: ['-na', app, '--args', spec.flag, ...buildIsolationArgs(spec.family), url],
+  };
 }
 
 /**
@@ -194,9 +255,12 @@ export function detectLinuxIncognitoCommand(url: string): BrowserCommand | null 
   // desktopName is like 'firefox.desktop' or 'google-chrome.desktop'.
   const stem = desktopName.replace(/\.desktop$/, '');
 
-  for (const [exe, flag] of LINUX_EXE_TO_FLAG) {
+  for (const [exe, spec] of LINUX_EXE_TO_SPEC) {
     if (stem.includes(exe)) {
-      return { command: exe, args: [flag, url] };
+      return {
+        command: exe,
+        args: [spec.flag, ...buildIsolationArgs(spec.family), url],
+      };
     }
   }
   return null;

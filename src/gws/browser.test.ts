@@ -16,6 +16,7 @@ const {
   defaultLaunchCommand,
   resolveLaunchCommand,
   openInBrowser,
+  buildIsolationArgs,
 } = await import('./browser.js');
 
 function makeFakeChild(): EventEmitter & { unref: () => void } {
@@ -161,7 +162,7 @@ describe('readWindowsBrowserExePath', () => {
 });
 
 describe('detectWindowsIncognitoCommand', () => {
-  it('produces Edge --inprivate command for MSEdgeHTM', () => {
+  it('produces Edge --inprivate command for MSEdgeHTM with --user-data-dir isolation', () => {
     const mockSpawnSync = vi.mocked(spawnSync);
     // First call: ProgId lookup. Second call: exe path lookup.
     mockSpawnSync
@@ -184,10 +185,17 @@ describe('detectWindowsIncognitoCommand', () => {
       });
 
     const cmd = detectWindowsIncognitoCommand('https://accounts.google.com/...');
-    expect(cmd).toEqual({
-      command: 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-      args: ['--inprivate', 'https://accounts.google.com/...'],
-    });
+    expect(cmd?.command).toBe(
+      'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'
+    );
+    // Edge is Chromium-family — must include isolation args so each launch
+    // is a fresh session, not joined to an existing InPrivate window.
+    expect(cmd?.args[0]).toBe('--inprivate');
+    expect(cmd?.args.some((a) => a.startsWith('--user-data-dir='))).toBe(true);
+    expect(cmd?.args).toContain('--no-first-run');
+    expect(cmd?.args).toContain('--no-default-browser-check');
+    // URL must be the last positional argument.
+    expect(cmd?.args[cmd.args.length - 1]).toBe('https://accounts.google.com/...');
   });
 
   it('returns null when ProgId is unknown (e.g. legacy IE)', () => {
@@ -240,7 +248,7 @@ describe('detectWindowsIncognitoCommand', () => {
 });
 
 describe('detectLinuxIncognitoCommand', () => {
-  it('returns chrome --incognito for google-chrome.desktop', () => {
+  it('returns chrome --incognito with --user-data-dir isolation for google-chrome.desktop', () => {
     vi.mocked(spawnSync).mockReturnValueOnce({
       status: 0,
       stdout: 'google-chrome.desktop\n',
@@ -250,13 +258,14 @@ describe('detectLinuxIncognitoCommand', () => {
       signal: null,
     });
 
-    expect(detectLinuxIncognitoCommand('https://...')).toEqual({
-      command: 'google-chrome',
-      args: ['--incognito', 'https://...'],
-    });
+    const cmd = detectLinuxIncognitoCommand('https://...');
+    expect(cmd?.command).toBe('google-chrome');
+    expect(cmd?.args[0]).toBe('--incognito');
+    expect(cmd?.args.some((a) => a.startsWith('--user-data-dir='))).toBe(true);
+    expect(cmd?.args[cmd.args.length - 1]).toBe('https://...');
   });
 
-  it('returns firefox --private-window for firefox.desktop', () => {
+  it('returns firefox --private-window WITHOUT --user-data-dir for firefox.desktop', () => {
     vi.mocked(spawnSync).mockReturnValueOnce({
       status: 0,
       stdout: 'firefox.desktop\n',
@@ -266,6 +275,9 @@ describe('detectLinuxIncognitoCommand', () => {
       signal: null,
     });
 
+    // Firefox handles --private-window correctly without isolation, so we
+    // must NOT inject --user-data-dir (which would mean something different
+    // and incompatible to Firefox anyway).
     expect(detectLinuxIncognitoCommand('https://...')).toEqual({
       command: 'firefox',
       args: ['--private-window', 'https://...'],
@@ -337,7 +349,7 @@ describe('resolveLaunchCommand', () => {
     expect(vi.mocked(spawnSync)).not.toHaveBeenCalled();
   });
 
-  it('returns incognito Edge command when detection succeeds on win32', () => {
+  it('returns incognito Edge command when detection succeeds on win32 (with isolation)', () => {
     setPlatform('win32');
     vi.mocked(spawnSync)
       .mockReturnValueOnce({
@@ -363,7 +375,9 @@ describe('resolveLaunchCommand', () => {
     });
     expect(isIncognito).toBe(true);
     expect(command.command).toBe('C:\\msedge.exe');
-    expect(command.args).toEqual(['--inprivate', 'https://example.com']);
+    expect(command.args[0]).toBe('--inprivate');
+    expect(command.args.some((a) => a.startsWith('--user-data-dir='))).toBe(true);
+    expect(command.args[command.args.length - 1]).toBe('https://example.com');
   });
 
   it('falls back to default launch when incognito detection fails', () => {
@@ -436,7 +450,7 @@ describe('openInBrowser', () => {
     stderrSpy.mockRestore();
   });
 
-  it('uses Edge --inprivate when launching with incognito on win32 (Edge default)', () => {
+  it('uses Edge --inprivate WITH isolation args when launching with incognito on win32', () => {
     setPlatform('win32');
     vi.mocked(spawnSync)
       .mockReturnValueOnce({
@@ -464,10 +478,12 @@ describe('openInBrowser', () => {
     expect(spawnCall[0]).toBe(
       'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'
     );
-    expect(spawnCall[1]).toEqual([
-      '--inprivate',
-      'https://accounts.google.com/o/oauth2/auth?...',
-    ]);
+    const args = spawnCall[1] as string[];
+    expect(args[0]).toBe('--inprivate');
+    expect(args.some((a) => a.startsWith('--user-data-dir='))).toBe(true);
+    expect(args).toContain('--no-first-run');
+    expect(args).toContain('--no-default-browser-check');
+    expect(args[args.length - 1]).toBe('https://accounts.google.com/o/oauth2/auth?...');
   });
 
   it('swallows launcher errors silently', () => {
@@ -477,5 +493,34 @@ describe('openInBrowser', () => {
 
     expect(() => openInBrowser('https://example.com')).not.toThrow();
     expect(() => fake.emit('error', new Error('xdg-open not found'))).not.toThrow();
+  });
+});
+
+describe('buildIsolationArgs', () => {
+  it('produces a unique --user-data-dir per call for chromium family', () => {
+    const a = buildIsolationArgs('chromium');
+    const b = buildIsolationArgs('chromium');
+    const dirA = a.find((x: string) => x.startsWith('--user-data-dir='));
+    const dirB = b.find((x: string) => x.startsWith('--user-data-dir='));
+    expect(dirA).toBeDefined();
+    expect(dirB).toBeDefined();
+    // CRITICAL: each launch must get a fresh dir, otherwise two consecutive
+    // `gwcli profiles auth` invocations would share session state and Google
+    // would auto-complete consent against the previously-signed-in account.
+    expect(dirA).not.toBe(dirB);
+    expect(a).toContain('--no-first-run');
+    expect(a).toContain('--no-default-browser-check');
+  });
+
+  it('returns empty array for firefox family (handles --private-window correctly itself)', () => {
+    expect(buildIsolationArgs('firefox')).toEqual([]);
+  });
+
+  it('returns empty array for opera family', () => {
+    expect(buildIsolationArgs('opera')).toEqual([]);
+  });
+
+  it('returns empty array for unknown family', () => {
+    expect(buildIsolationArgs('unknown')).toEqual([]);
   });
 });
