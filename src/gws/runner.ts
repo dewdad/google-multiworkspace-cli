@@ -1,4 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process';
+import { existsSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { getGwsBinaryPath, resolveGwsSpawnCommand } from './binary.js';
 import { getProfileGwsDir } from '../profiles/config.js';
 import { updateLastUsed } from '../profiles/index.js';
@@ -8,6 +10,32 @@ import type { GwsRunResult } from '../types/index.js';
 
 // Re-export so existing imports of openInBrowser from runner.ts keep working.
 export { openInBrowser } from './browser.js';
+
+/**
+ * Invalidate the gws access-token cache for a profile.
+ *
+ * Why: gws keeps `token_cache.json` (decrypted access tokens) separate from
+ * `credentials.enc` (encrypted refresh credentials). When `gws auth login`
+ * overwrites credentials.enc with a different account's tokens, it does NOT
+ * clear token_cache.json — so subsequent `gws <service>` calls return data
+ * for the *previous* account until the cached access token expires (~1h).
+ * This bit us hard during multi-profile re-auth: the new credentials were
+ * correct on disk but every API call returned the previous account's data.
+ *
+ * Removing the cache forces gws to mint a fresh access token from the new
+ * refresh credentials on the next API call. Safe + idempotent.
+ */
+function invalidateGwsTokenCache(profileName: string): void {
+  const cachePath = join(getProfileGwsDir(profileName), 'token_cache.json');
+  try {
+    if (existsSync(cachePath)) {
+      rmSync(cachePath, { force: true });
+    }
+  } catch {
+    // Best-effort — not worth aborting auth over. Stale cache will self-clear
+    // when the access token expires (~1h on Google).
+  }
+}
 
 export interface RunGwsOptions {
   /** Profile name — used to resolve the config dir */
@@ -223,6 +251,13 @@ export function runGwsAuthLogin(
 
     child.once('close', (code) => {
       tryUpdateLastUsed(profileName);
+      // On successful auth, invalidate the access-token cache so subsequent
+      // gws calls don't return data for whichever account previously held
+      // tokens for this profile. (Upstream gws bug: re-auth overwrites
+      // credentials.enc but leaves token_cache.json stale.)
+      if (code === 0) {
+        invalidateGwsTokenCache(profileName);
+      }
       resolve({ exitCode: code ?? 1 });
     });
   });

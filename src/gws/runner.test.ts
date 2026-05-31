@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { spawn, spawnSync } from 'node:child_process';
+import { existsSync, rmSync } from 'node:fs';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 
@@ -7,6 +8,12 @@ import { PassThrough } from 'node:stream';
 vi.mock('node:child_process', () => ({
   spawnSync: vi.fn(),
   spawn: vi.fn(),
+}));
+
+// Mock fs (token-cache invalidation reads existsSync + calls rmSync).
+vi.mock('node:fs', () => ({
+  existsSync: vi.fn(),
+  rmSync: vi.fn(),
 }));
 
 // Mock profiles config
@@ -282,6 +289,53 @@ describe('runGwsAuthLogin', () => {
 
     const result = await promise;
     expect(result.exitCode).toBe(1);
+  });
+
+  it('invalidates token_cache.json on successful auth (gws bug workaround)', async () => {
+    const mockSpawn = vi.mocked(spawn);
+    const fake = makeFakeChild();
+    mockSpawn.mockReturnValue(fake.child as never);
+    vi.mocked(existsSync).mockReturnValue(true);
+
+    const promise = runGwsAuthLogin('work', undefined, { openBrowser: vi.fn() });
+    fake.close(0);
+    await promise;
+
+    // Must remove the stale access-token cache, otherwise subsequent gws API
+    // calls return data for the previously-authenticated account until the
+    // ~1h access token expires. Path uses platform-native separators
+    // (path.join on win32 produces backslashes), so match the basename
+    // robustly with a regex instead of asserting an exact string.
+    expect(vi.mocked(rmSync)).toHaveBeenCalledTimes(1);
+    const call = vi.mocked(rmSync).mock.calls[0]!;
+    expect(String(call[0])).toMatch(/[\\/]token_cache\.json$/);
+    expect(String(call[0])).toContain('work');
+    expect(call[1]).toEqual(expect.objectContaining({ force: true }));
+  });
+
+  it('does NOT invalidate token cache when auth fails (no fresh credentials to fall through to)', async () => {
+    const mockSpawn = vi.mocked(spawn);
+    const fake = makeFakeChild();
+    mockSpawn.mockReturnValue(fake.child as never);
+
+    const promise = runGwsAuthLogin('work', undefined, { openBrowser: vi.fn() });
+    fake.close(2);
+    await promise;
+
+    expect(vi.mocked(rmSync)).not.toHaveBeenCalled();
+  });
+
+  it('skips token cache deletion when file does not exist (idempotent)', async () => {
+    const mockSpawn = vi.mocked(spawn);
+    const fake = makeFakeChild();
+    mockSpawn.mockReturnValue(fake.child as never);
+    vi.mocked(existsSync).mockReturnValue(false);
+
+    const promise = runGwsAuthLogin('work', undefined, { openBrowser: vi.fn() });
+    fake.close(0);
+    await promise;
+
+    expect(vi.mocked(rmSync)).not.toHaveBeenCalled();
   });
 });
 
