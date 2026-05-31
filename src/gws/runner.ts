@@ -3,7 +3,11 @@ import { getGwsBinaryPath, resolveGwsSpawnCommand } from './binary.js';
 import { getProfileGwsDir } from '../profiles/config.js';
 import { updateLastUsed } from '../profiles/index.js';
 import { translateGwsError } from './errors.js';
+import { openInBrowser } from './browser.js';
 import type { GwsRunResult } from '../types/index.js';
+
+// Re-export so existing imports of openInBrowser from runner.ts keep working.
+export { openInBrowser } from './browser.js';
 
 export interface RunGwsOptions {
   /** Profile name — used to resolve the config dir */
@@ -102,55 +106,28 @@ export function execGwsPassthrough(profileName: string, gwsArgs: string[]): neve
  */
 const OAUTH_URL_REGEX = /(https:\/\/accounts\.google\.com\/o\/oauth2\/[^\s]+)/;
 
-/**
- * Launch a URL in the OS default browser. Best-effort — silently no-ops if the
- * platform launcher isn't available, since gws has already printed the URL to
- * the terminal as a fallback.
- */
-export function openInBrowser(url: string): void {
-  let command: string;
-  let args: string[];
-
-  switch (process.platform) {
-    case 'win32':
-      // `start` is a cmd.exe builtin, not an executable. The empty "" is the
-      // window-title placeholder that `start` requires when the actual target
-      // is a quoted string (the URL).
-      command = 'cmd';
-      args = ['/c', 'start', '""', url];
-      break;
-    case 'darwin':
-      command = 'open';
-      args = [url];
-      break;
-    default:
-      command = 'xdg-open';
-      args = [url];
-      break;
-  }
-
-  try {
-    const child = spawn(command, args, {
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: true,
-    });
-    // Don't keep the parent process alive waiting on the launcher.
-    child.unref();
-    // Swallow launcher errors — the URL is still printed in the terminal.
-    child.on('error', () => {
-      /* no-op */
-    });
-  } catch {
-    /* no-op — platform launcher unavailable, user still has the URL */
-  }
-}
-
 export interface RunGwsAuthLoginOptions {
   /**
-   * Browser launcher. Overridable for testing. Defaults to {@link openInBrowser}.
+   * Browser launcher. Overridable for testing. Defaults to a closure over
+   * {@link openInBrowser} that forwards the configured `incognito` setting.
    */
   openBrowser?: (url: string) => void;
+  /**
+   * Open the OAuth URL in a private/incognito window. Default: `true`.
+   *
+   * Why default-on: `gws auth login` lets Google honor `prompt=select_account`
+   * against whatever Google account is signed into the default browser. If
+   * the wrong account is signed in (or the consent screen is in Testing mode
+   * and that account isn't a test user), the user gets a misleading
+   * "Required parameter is missing: response_type" error against the
+   * auto-selected account. A fresh incognito session forces an explicit
+   * account pick / sign-in every time, eliminating that whole class of UX
+   * failure for multi-account setups.
+   *
+   * Set to `false` to use the user's normal browser session (same UX as
+   * gwcli ≤ 2.1.0).
+   */
+  incognito?: boolean;
 }
 
 /**
@@ -168,7 +145,9 @@ export function runGwsAuthLogin(
   services?: string[],
   options: RunGwsAuthLoginOptions = {}
 ): Promise<GwsRunResult> {
-  const openBrowser = options.openBrowser ?? openInBrowser;
+  const incognito = options.incognito ?? true;
+  const openBrowser =
+    options.openBrowser ?? ((url: string) => openInBrowser(url, { incognito }));
 
   const args = ['auth', 'login'];
   if (services && services.length > 0) {

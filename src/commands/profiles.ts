@@ -60,6 +60,7 @@ export function registerProfilesCommands(program: Command): void {
     .option('--scopes <list>', 'Comma-separated service names for scope picker', 'gmail,calendar,drive,docs,sheets,keep,tasks')
     .option('--display-name <name>', 'Human-friendly display name')
     .option('--no-auth', 'Skip authentication after creating profile')
+    .option('--no-incognito', 'Open OAuth URL in default browser session instead of a private/incognito window')
     .action(async (name: string, options) => {
       try {
         // Verify gws is available
@@ -76,7 +77,12 @@ export function registerProfilesCommands(program: Command): void {
 
         if (options.auth !== false) {
           console.log('Starting authentication...');
-          const result = await runGwsAuthLogin(name, scopes);
+          // Commander parses `--no-incognito` as `incognito: false` and the
+          // implicit default as `incognito: true` — pass through verbatim so
+          // the runner default (`true`) wins when no flag is given.
+          const result = await runGwsAuthLogin(name, scopes, {
+            incognito: options.incognito as boolean,
+          });
           if (result.exitCode === 0) {
             console.log(`Profile '${name}' authenticated successfully.`);
             // Best-effort: resolve and persist the bound Google identity.
@@ -189,6 +195,7 @@ export function registerProfilesCommands(program: Command): void {
     .command('auth <name>')
     .description('(Re-)authenticate a profile')
     .option('--scopes <list>', 'Comma-separated service names (defaults to the profile\'s stored scopes)')
+    .option('--no-incognito', 'Open OAuth URL in default browser session instead of a private/incognito window')
     .action(async (name: string, options) => {
       try {
         findGwsBinary();
@@ -223,7 +230,9 @@ export function registerProfilesCommands(program: Command): void {
         if (scopes && scopes.length > 0) {
           console.log(`Using scopes: ${scopes.join(', ')}`);
         }
-        const result = await runGwsAuthLogin(name, scopes);
+        const result = await runGwsAuthLogin(name, scopes, {
+          incognito: options.incognito as boolean,
+        });
         if (result.exitCode === 0) {
           console.log(`Profile '${name}' authenticated successfully.`);
           // Best-effort: persist the resolved Google identity so `profiles list`
