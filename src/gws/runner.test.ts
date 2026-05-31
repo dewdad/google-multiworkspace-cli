@@ -1,9 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { spawnSync } from 'node:child_process';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { spawn, spawnSync } from 'node:child_process';
+import { EventEmitter } from 'node:events';
+import { PassThrough } from 'node:stream';
 
 // Mock child_process
 vi.mock('node:child_process', () => ({
   spawnSync: vi.fn(),
+  spawn: vi.fn(),
 }));
 
 // Mock profiles config
@@ -17,7 +20,38 @@ vi.mock('../profiles/index.js', () => ({
   updateLastUsed: vi.fn(),
 }));
 
-const { runGws } = await import('./runner.js');
+const { runGws, runGwsAuthLogin, openInBrowser } = await import('./runner.js');
+
+/**
+ * Build a fake `spawn`-returned ChildProcess sufficient for runGwsAuthLogin's
+ * use of stdout/stderr streams + 'close'/'error' events.
+ */
+function makeFakeChild(): {
+  child: EventEmitter & {
+    stdout: PassThrough;
+    stderr: PassThrough;
+    unref: () => void;
+  };
+  emitStdout: (data: string) => void;
+  emitStderr: (data: string) => void;
+  close: (code: number) => void;
+  error: (err: Error) => void;
+} {
+  const stdout = new PassThrough();
+  const stderr = new PassThrough();
+  const child = Object.assign(new EventEmitter(), {
+    stdout,
+    stderr,
+    unref: vi.fn(),
+  });
+  return {
+    child,
+    emitStdout: (d) => stdout.write(d),
+    emitStderr: (d) => stderr.write(d),
+    close: (code) => child.emit('close', code),
+    error: (err) => child.emit('error', err),
+  };
+}
 
 describe('runGws', () => {
   beforeEach(() => {
@@ -127,5 +161,193 @@ describe('runGws', () => {
     const callArgs = mockSpawnSync.mock.calls[0]!;
     const env = (callArgs[2] as { env: Record<string, string> }).env;
     expect(env['GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND']).toBeUndefined();
+  });
+});
+
+describe('runGwsAuthLogin', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('detects the OAuth URL on stdout and invokes the browser launcher exactly once', async () => {
+    const mockSpawn = vi.mocked(spawn);
+    const fake = makeFakeChild();
+    mockSpawn.mockReturnValue(fake.child as never);
+
+    const openBrowser = vi.fn();
+    const promise = runGwsAuthLogin('work', ['gmail', 'calendar'], { openBrowser });
+
+    // gws prints a header line, then the URL line, then waits.
+    fake.emitStdout('Open this URL in your browser to authenticate:\n\n  ');
+    fake.emitStdout(
+      'https://accounts.google.com/o/oauth2/auth?scope=https://www.googleapis.com/auth/gmail.modify&access_type=offline&redirect_uri=http://localhost:8638&response_type=code&client_id=abc.apps.googleusercontent.com&prompt=select_account+consent\n'
+    );
+    // A second URL chunk should NOT trigger the launcher again.
+    fake.emitStdout('https://accounts.google.com/o/oauth2/auth?scope=other\n');
+
+    fake.close(0);
+    const result = await promise;
+
+    expect(result.exitCode).toBe(0);
+    expect(openBrowser).toHaveBeenCalledTimes(1);
+    expect(openBrowser.mock.calls[0]![0]).toBe(
+      'https://accounts.google.com/o/oauth2/auth?scope=https://www.googleapis.com/auth/gmail.modify&access_type=offline&redirect_uri=http://localhost:8638&response_type=code&client_id=abc.apps.googleusercontent.com&prompt=select_account+consent'
+    );
+  });
+
+  it('detects the OAuth URL when emitted on stderr (gws routes prompts there in some builds)', async () => {
+    const mockSpawn = vi.mocked(spawn);
+    const fake = makeFakeChild();
+    mockSpawn.mockReturnValue(fake.child as never);
+
+    const openBrowser = vi.fn();
+    const promise = runGwsAuthLogin('work', undefined, { openBrowser });
+
+    fake.emitStderr(
+      'Visit URL: https://accounts.google.com/o/oauth2/auth?response_type=code&client_id=zzz\n'
+    );
+    fake.close(0);
+    await promise;
+
+    expect(openBrowser).toHaveBeenCalledWith(
+      'https://accounts.google.com/o/oauth2/auth?response_type=code&client_id=zzz'
+    );
+  });
+
+  it('does NOT call the browser launcher if no URL appears (gws errored before printing it)', async () => {
+    const mockSpawn = vi.mocked(spawn);
+    const fake = makeFakeChild();
+    mockSpawn.mockReturnValue(fake.child as never);
+
+    const openBrowser = vi.fn();
+    const promise = runGwsAuthLogin('work', ['gmail'], { openBrowser });
+
+    fake.emitStderr('error[client_secret]: file not found\n');
+    fake.close(2);
+    const result = await promise;
+
+    expect(result.exitCode).toBe(2);
+    expect(openBrowser).not.toHaveBeenCalled();
+  });
+
+  it('handles URL split across multiple stdout chunks', async () => {
+    const mockSpawn = vi.mocked(spawn);
+    const fake = makeFakeChild();
+    mockSpawn.mockReturnValue(fake.child as never);
+
+    const openBrowser = vi.fn();
+    const promise = runGwsAuthLogin('work', undefined, { openBrowser });
+
+    fake.emitStdout('Open this URL:\n\n  https://accounts.google.com/o/oauth2/auth?');
+    fake.emitStdout('client_id=xyz&response_type=code\n');
+    fake.close(0);
+    await promise;
+
+    expect(openBrowser).toHaveBeenCalledWith(
+      'https://accounts.google.com/o/oauth2/auth?client_id=xyz&response_type=code'
+    );
+  });
+
+  it('passes the correct env vars to gws (config dir, keyring backend) and the --services flag', async () => {
+    const mockSpawn = vi.mocked(spawn);
+    const fake = makeFakeChild();
+    mockSpawn.mockReturnValue(fake.child as never);
+
+    const promise = runGwsAuthLogin('work', ['gmail', 'drive'], { openBrowser: vi.fn() });
+    fake.close(0);
+    await promise;
+
+    const callArgs = mockSpawn.mock.calls[0]!;
+    expect(callArgs[1]).toEqual(
+      expect.arrayContaining(['auth', 'login', '--services', 'gmail,drive'])
+    );
+    expect(callArgs[2]).toEqual(
+      expect.objectContaining({
+        env: expect.objectContaining({
+          GOOGLE_WORKSPACE_CLI_CONFIG_DIR: '/mock/config/profiles/work/gws',
+          GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND: 'file',
+        }),
+        stdio: ['inherit', 'pipe', 'pipe'],
+      })
+    );
+  });
+
+  it('resolves with exitCode 1 when spawn emits an error event', async () => {
+    const mockSpawn = vi.mocked(spawn);
+    const fake = makeFakeChild();
+    mockSpawn.mockReturnValue(fake.child as never);
+
+    const promise = runGwsAuthLogin('work', undefined, { openBrowser: vi.fn() });
+    fake.error(new Error('ENOENT'));
+
+    const result = await promise;
+    expect(result.exitCode).toBe(1);
+  });
+});
+
+describe('openInBrowser', () => {
+  const origPlatform = process.platform;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', { value: origPlatform });
+  });
+
+  function setPlatform(p: NodeJS.Platform): void {
+    Object.defineProperty(process, 'platform', { value: p });
+  }
+
+  it('uses cmd /c start on win32', () => {
+    setPlatform('win32');
+    const mockSpawn = vi.mocked(spawn);
+    const fake = makeFakeChild();
+    mockSpawn.mockReturnValue(fake.child as never);
+
+    openInBrowser('https://example.com/auth');
+
+    const callArgs = mockSpawn.mock.calls[0]!;
+    expect(callArgs[0]).toBe('cmd');
+    expect(callArgs[1]).toEqual(['/c', 'start', '""', 'https://example.com/auth']);
+    expect(fake.child.unref).toHaveBeenCalled();
+  });
+
+  it('uses open on darwin', () => {
+    setPlatform('darwin');
+    const mockSpawn = vi.mocked(spawn);
+    const fake = makeFakeChild();
+    mockSpawn.mockReturnValue(fake.child as never);
+
+    openInBrowser('https://example.com/auth');
+
+    const callArgs = mockSpawn.mock.calls[0]!;
+    expect(callArgs[0]).toBe('open');
+    expect(callArgs[1]).toEqual(['https://example.com/auth']);
+  });
+
+  it('uses xdg-open on linux', () => {
+    setPlatform('linux');
+    const mockSpawn = vi.mocked(spawn);
+    const fake = makeFakeChild();
+    mockSpawn.mockReturnValue(fake.child as never);
+
+    openInBrowser('https://example.com/auth');
+
+    const callArgs = mockSpawn.mock.calls[0]!;
+    expect(callArgs[0]).toBe('xdg-open');
+    expect(callArgs[1]).toEqual(['https://example.com/auth']);
+  });
+
+  it('swallows launcher errors silently', () => {
+    setPlatform('linux');
+    const mockSpawn = vi.mocked(spawn);
+    const fake = makeFakeChild();
+    mockSpawn.mockReturnValue(fake.child as never);
+
+    expect(() => openInBrowser('https://example.com/auth')).not.toThrow();
+    // Emitting error after the call returns must not throw either.
+    expect(() => fake.error(new Error('xdg-open not found'))).not.toThrow();
   });
 });

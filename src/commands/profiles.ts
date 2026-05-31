@@ -76,7 +76,7 @@ export function registerProfilesCommands(program: Command): void {
 
         if (options.auth !== false) {
           console.log('Starting authentication...');
-          const result = runGwsAuthLogin(name, scopes);
+          const result = await runGwsAuthLogin(name, scopes);
           if (result.exitCode === 0) {
             console.log(`Profile '${name}' authenticated successfully.`);
             // Best-effort: resolve and persist the bound Google identity.
@@ -189,7 +189,7 @@ export function registerProfilesCommands(program: Command): void {
     .command('auth <name>')
     .description('(Re-)authenticate a profile')
     .option('--scopes <list>', 'Comma-separated service names (defaults to the profile\'s stored scopes)')
-    .action((name: string, options) => {
+    .action(async (name: string, options) => {
       try {
         findGwsBinary();
 
@@ -223,7 +223,7 @@ export function registerProfilesCommands(program: Command): void {
         if (scopes && scopes.length > 0) {
           console.log(`Using scopes: ${scopes.join(', ')}`);
         }
-        const result = runGwsAuthLogin(name, scopes);
+        const result = await runGwsAuthLogin(name, scopes);
         if (result.exitCode === 0) {
           console.log(`Profile '${name}' authenticated successfully.`);
           // Best-effort: persist the resolved Google identity so `profiles list`

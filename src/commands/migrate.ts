@@ -109,7 +109,7 @@ async function migrateProfile(name: string, options: MigrateOptions): Promise<vo
   // Run auth if not skipped
   if (options.auth !== false && options.client) {
     console.log(`    Running gws auth login...`);
-    const result = runGwsAuthLogin(name, meta.scopes);
+    const result = await runGwsAuthLogin(name, meta.scopes);
     if (result.exitCode === 0) {
       console.log(`    ✓ '${name}' migrated and authenticated`);
     } else {
