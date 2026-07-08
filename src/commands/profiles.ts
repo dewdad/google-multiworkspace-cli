@@ -33,7 +33,7 @@ export function registerProfilesCommands(program: Command): void {
           console.log('[]');
         } else {
           console.log('No profiles configured.');
-          console.log('Add a profile with: gwcli profiles add <name> --client <path>');
+          console.log('Add a profile with: gwcli profiles add <name>');
         }
         return;
       }
@@ -56,7 +56,7 @@ export function registerProfilesCommands(program: Command): void {
   profiles
     .command('add <name>')
     .description('Add a new profile')
-    .requiredOption('--client <path>', 'Path to OAuth client credentials JSON file')
+    .option('--client <path>', 'Path to a custom OAuth client credentials JSON file (optional — uses the built-in gwcli client if omitted)')
     .option('--scopes <list>', 'Comma-separated service names for scope picker', 'gmail,calendar,drive,docs,sheets,keep,tasks')
     .option('--display-name <name>', 'Human-friendly display name')
     .option('--no-auth', 'Skip authentication after creating profile')
@@ -107,7 +107,7 @@ export function registerProfilesCommands(program: Command): void {
               // Last-ditch: leave breadcrumbs so the user can clean up manually.
               console.error(`(Could not auto-remove. Run: gwcli profiles remove ${name} --force)`);
             }
-            console.error(`Re-run: gwcli profiles add ${name} --client <path>`);
+            console.error(`Re-run: gwcli profiles add ${name}`);
             process.exit(result.exitCode || 1);
           }
         } else {

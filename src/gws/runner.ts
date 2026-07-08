@@ -2,6 +2,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { getGwsBinaryPath, resolveGwsSpawnCommand } from './binary.js';
+import { DEFAULT_OAUTH_CLIENT_ID, DEFAULT_OAUTH_CLIENT_SECRET } from './default-client.js';
 import { getProfileGwsDir } from '../profiles/config.js';
 import { updateLastUsed } from '../profiles/index.js';
 import { translateGwsError } from './errors.js';
@@ -198,6 +199,16 @@ export function runGwsAuthLogin(
     ...process.env,
     GOOGLE_WORKSPACE_CLI_CONFIG_DIR: gwsConfigDir,
     GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND: 'file',
+    // Built-in OAuth client as a FALLBACK, so a profile added without `--client`
+    // can still authenticate. Precedence (highest first): a per-profile
+    // client_secret.json in the gws config dir (from `--client`) wins over these
+    // env vars — verified: `gws auth status` reports config_client_id from the
+    // file even when the env vars are set; then an ambient GOOGLE_WORKSPACE_CLI_*
+    // set by the caller (preserved via `??`); then the embedded default.
+    GOOGLE_WORKSPACE_CLI_CLIENT_ID:
+      process.env['GOOGLE_WORKSPACE_CLI_CLIENT_ID'] ?? DEFAULT_OAUTH_CLIENT_ID,
+    GOOGLE_WORKSPACE_CLI_CLIENT_SECRET:
+      process.env['GOOGLE_WORKSPACE_CLI_CLIENT_SECRET'] ?? DEFAULT_OAUTH_CLIENT_SECRET,
   };
 
   return new Promise<GwsRunResult>((resolve) => {

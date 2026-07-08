@@ -1,19 +1,56 @@
 # OAuth Client Bootstrap
 
-> **Read this once before adding your first profile.** Google has made
+## Default: just add a profile
+
+`gwcli` ships with a built-in Desktop OAuth client, so the normal path needs no
+Cloud Console setup and no client JSON:
+
+```bash
+gwcli profiles add personal
+```
+
+This opens a browser for consent against gwcli's built-in client and stores your
+tokens under the profile's isolated `gws` config dir. That's the whole flow for
+most users — you can stop reading here.
+
+The built-in client can be overridden at runtime (e.g. to ship an org-specific
+client) via the `GWCLI_CLIENT_ID` / `GWCLI_CLIENT_SECRET` environment variables,
+without rebuilding.
+
+> **Why shipping a client secret is safe:** the built-in client is a
+> **Desktop / installed-app** OAuth client. Google classifies desktop client
+> secrets as non-confidential — the installed-app flow assumes the secret is
+> embedded in distributed code and cannot be kept private. `gcloud`, `gh`, and
+> the AWS SAM CLI all embed their client the same way.
+
+## Advanced: bring your own OAuth client
+
+Use your own OAuth client when you want per-account quota isolation, an internal
+Workspace consent screen, or full control over the Cloud project. Pass it with
+`--client <path>`:
+
+```bash
+gwcli profiles add work --client ~/Downloads/client_secret_*.json
+```
+
+When `--client` is given, gwcli copies that `client_secret.json` into the
+profile's `gws` config dir, and it takes precedence over the built-in client for
+that profile.
+
+> **Read this once before creating your own client.** Google has made
 > post-creation client-secret retrieval impossible. If you miss the secret in
 > the modal that pops up after creation, you must either create a *second*
 > client secret or delete and recreate the OAuth client. Multiple users have
 > orphaned OAuth clients here — don't be one of them.
 
-## What you need
+### What you need
 
 A Google Cloud project with the OAuth consent screen configured + a Desktop
 **OAuth client ID** whose `client_secret` you have captured to a JSON file.
 
 This file is the `--client <path>` argument to `gwcli profiles add`.
 
-## Manual flow (most reliable)
+### Manual flow (most reliable)
 
 1. **Open the Google Cloud Console** in a real browser (not a headless one —
    see "Why headless automation fails" below):
@@ -51,7 +88,7 @@ This file is the `--client <path>` argument to `gwcli profiles add`.
    (Or whatever path you saved it to.) A browser opens, you authenticate, and
    tokens land in your config dir.
 
-## I missed the modal — what now?
+### I missed the modal — what now?
 
 Google deprecated post-creation viewing of `client_secret` in 2024. Your
 options, in order of preference:
@@ -67,7 +104,7 @@ options, in order of preference:
 
 You cannot recover the original secret.
 
-## Why headless automation fails
+### Why headless automation fails
 
 If you tried to script this with Playwright, Selenium, or
 `Start-Process`-style spawns and ended up with the modal opening but no file
@@ -88,7 +125,7 @@ events unless you explicitly hook them up:
 The recommendation: do step 5 (capture the JSON) **manually in a real
 browser**, exactly once per Google account. Everything else can be scripted.
 
-## Multi-account note
+### Multi-account note
 
 You can reuse the same OAuth client across all your profiles (personal, work,
 client-X). The OAuth client identifies the *application*, not the user — each

@@ -21,15 +21,18 @@ const DEFAULT_SERVICES = ['gmail', 'calendar', 'drive', 'docs', 'sheets', 'keep'
 // ─── Profile Add ─────────────────────────────────────────────────────────────
 
 export interface AddProfileOptions {
-  clientSecretPath: string;
+  clientSecretPath?: string;
   displayName?: string;
   scopes?: string[];
   noAuth?: boolean;
 }
 
 /**
- * Create a new profile directory structure and copy client_secret.json into it.
- * Does NOT run auth — caller must invoke gws auth login separately.
+ * Create a new profile directory structure. When `clientSecretPath` is given,
+ * its client_secret.json is copied into the profile's gws config dir (custom
+ * OAuth client). When omitted, the profile relies on gwcli's built-in Desktop
+ * OAuth client injected at auth time (see gws/default-client.ts). Does NOT run
+ * auth — caller must invoke gws auth login separately.
  */
 export function addProfile(name: string, options: AddProfileOptions): ProfileMeta {
   validateProfileName(name);
@@ -42,24 +45,27 @@ export function addProfile(name: string, options: AddProfileOptions): ProfileMet
     );
   }
 
-  // Validate client secret path
-  const clientPath = resolve(options.clientSecretPath);
-  if (!existsSync(clientPath)) {
-    throw new GwcliError(
-      `Client secret file not found: ${clientPath}`,
-      'CLIENT_SECRET_NOT_FOUND',
-      'Download your OAuth client JSON from the Google Cloud Console.'
-    );
+  const gwsDir = getProfileGwsDir(name);
+  let clientSecretSource = 'embedded-default';
+
+  if (options.clientSecretPath !== undefined) {
+    const clientPath = resolve(options.clientSecretPath);
+    if (!existsSync(clientPath)) {
+      throw new GwcliError(
+        `Client secret file not found: ${clientPath}`,
+        'CLIENT_SECRET_NOT_FOUND',
+        'Download your OAuth client JSON from the Google Cloud Console.'
+      );
+    }
+    clientSecretSource = clientPath;
   }
 
-  // Create profile directories
-  const gwsDir = getProfileGwsDir(name);
   mkdirSync(gwsDir, { recursive: true });
 
-  // Copy client_secret.json into the profile's gws config dir
-  copyFileSync(clientPath, join(gwsDir, 'client_secret.json'));
+  if (clientSecretSource !== 'embedded-default') {
+    copyFileSync(clientSecretSource, join(gwsDir, 'client_secret.json'));
+  }
 
-  // Write initial meta.json
   const meta: ProfileMeta = {
     name,
     displayName: options.displayName ?? name,
@@ -67,7 +73,7 @@ export function addProfile(name: string, options: AddProfileOptions): ProfileMet
     createdAt: new Date().toISOString(),
     lastUsed: null,
     scopes: options.scopes ?? DEFAULT_SERVICES,
-    clientSecretSource: clientPath,
+    clientSecretSource,
     tags: [],
   };
   saveProfileMeta(name, meta);

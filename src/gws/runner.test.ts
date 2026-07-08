@@ -28,6 +28,7 @@ vi.mock('../profiles/index.js', () => ({
 }));
 
 const { runGws, runGwsAuthLogin, openInBrowser } = await import('./runner.js');
+const { DEFAULT_OAUTH_CLIENT_ID, DEFAULT_OAUTH_CLIENT_SECRET } = await import('./default-client.js');
 
 /**
  * Build a fake `spawn`-returned ChildProcess sufficient for runGwsAuthLogin's
@@ -360,6 +361,56 @@ describe('runGwsAuthLogin', () => {
         stdio: ['inherit', 'pipe', 'pipe'],
       })
     );
+  });
+
+  it('injects the built-in default OAuth client into the child env when the ambient env does not set it', async () => {
+    const origId = process.env['GOOGLE_WORKSPACE_CLI_CLIENT_ID'];
+    const origSecret = process.env['GOOGLE_WORKSPACE_CLI_CLIENT_SECRET'];
+    delete process.env['GOOGLE_WORKSPACE_CLI_CLIENT_ID'];
+    delete process.env['GOOGLE_WORKSPACE_CLI_CLIENT_SECRET'];
+    try {
+      const mockSpawn = vi.mocked(spawn);
+      const fake = makeFakeChild();
+      mockSpawn.mockReturnValue(fake.child as never);
+
+      const promise = runGwsAuthLogin('work', ['gmail'], { openBrowser: vi.fn() });
+      fake.close(0);
+      await promise;
+
+      const env = (mockSpawn.mock.calls[0]![2] as { env: Record<string, string> }).env;
+      expect(env['GOOGLE_WORKSPACE_CLI_CLIENT_ID']).toBe(DEFAULT_OAUTH_CLIENT_ID);
+      expect(env['GOOGLE_WORKSPACE_CLI_CLIENT_SECRET']).toBe(DEFAULT_OAUTH_CLIENT_SECRET);
+    } finally {
+      if (origId === undefined) delete process.env['GOOGLE_WORKSPACE_CLI_CLIENT_ID'];
+      else process.env['GOOGLE_WORKSPACE_CLI_CLIENT_ID'] = origId;
+      if (origSecret === undefined) delete process.env['GOOGLE_WORKSPACE_CLI_CLIENT_SECRET'];
+      else process.env['GOOGLE_WORKSPACE_CLI_CLIENT_SECRET'] = origSecret;
+    }
+  });
+
+  it('does NOT override an ambient GOOGLE_WORKSPACE_CLI_CLIENT_ID/SECRET with the default (precedence)', async () => {
+    const origId = process.env['GOOGLE_WORKSPACE_CLI_CLIENT_ID'];
+    const origSecret = process.env['GOOGLE_WORKSPACE_CLI_CLIENT_SECRET'];
+    process.env['GOOGLE_WORKSPACE_CLI_CLIENT_ID'] = 'ambient-id.apps.googleusercontent.com';
+    process.env['GOOGLE_WORKSPACE_CLI_CLIENT_SECRET'] = 'ambient-secret';
+    try {
+      const mockSpawn = vi.mocked(spawn);
+      const fake = makeFakeChild();
+      mockSpawn.mockReturnValue(fake.child as never);
+
+      const promise = runGwsAuthLogin('work', ['gmail'], { openBrowser: vi.fn() });
+      fake.close(0);
+      await promise;
+
+      const env = (mockSpawn.mock.calls[0]![2] as { env: Record<string, string> }).env;
+      expect(env['GOOGLE_WORKSPACE_CLI_CLIENT_ID']).toBe('ambient-id.apps.googleusercontent.com');
+      expect(env['GOOGLE_WORKSPACE_CLI_CLIENT_SECRET']).toBe('ambient-secret');
+    } finally {
+      if (origId === undefined) delete process.env['GOOGLE_WORKSPACE_CLI_CLIENT_ID'];
+      else process.env['GOOGLE_WORKSPACE_CLI_CLIENT_ID'] = origId;
+      if (origSecret === undefined) delete process.env['GOOGLE_WORKSPACE_CLI_CLIENT_SECRET'];
+      else process.env['GOOGLE_WORKSPACE_CLI_CLIENT_SECRET'] = origSecret;
+    }
   });
 
   it('resolves with exitCode 1 when spawn emits an error event', async () => {
