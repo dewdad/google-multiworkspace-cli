@@ -154,10 +154,207 @@ gwcli migrate --client <path>             # migrate v1 profiles to v2 layout
 ## Error Recovery
 
 On any command failure:
-1. Runtime exit `2` → auth expired → `gwcli profiles auth <profile>`
+1. Runtime exit `2` → auth expired → see "Re-authenticating expired tokens" below
 2. Runtime exit `1` → gws printed error to stderr, inspect it
 3. Preflight exit `63`/`64` → run `gwcli setup` or add a profile (see Step 0)
 4. Run `gwcli doctor` for systematic diagnosis
+
+→ Full reference: `@references/troubleshooting.md`
+
+## Re-authenticating expired tokens (the shared-CDP flow)
+
+When `gwcli profiles status --strict` exits non-zero or any API call returns
+`invalid_grant: Token has been expired or revoked`, the profile needs a fresh
+OAuth round-trip. **This is interactive — the user has to log in to Google in a
+real browser.** The clean way to run it with a Hermes agent in the loop:
+
+### Why the simple "just call `gwcli profiles auth <name>`" doesn't work for agents
+
+- `gws auth login` (the underlying Rust binary) **always shows a TUI scope
+  picker first** (Ink-style ratatui menu, "Enter to Confirm"). Even if you
+  pass `--scopes gmail,calendar,...` to `gwcli profiles auth`, the picker
+  still appears. It needs a real `\r` from a real keyboard — agent `write`/
+  `submit` over a PTY produces `\n`, which the picker reads as Down-Arrow.
+- After Confirm, gws prints the OAuth URL and starts a localhost callback
+  server on a **dynamic port** (e.g. `127.0.0.1:36767`).
+- gws **does not auto-open the URL** — it only prints "Open this URL in your
+  browser to authenticate:". So even on a graphical machine, the user has to
+  copy/paste it somewhere.
+
+### The right workflow
+
+```
+┌──────────────┐      ┌─────────────────┐      ┌────────────────┐
+│ User's       │      │ User runs       │      │ Agent driving  │
+│ terminal A   │      │ gwcli auth      │      │ cloak-cdp      │
+│ (CLI Hermes) │ ───▶ │ in terminal B   │ ───▶ │ browser via    │
+│              │      │ (real TTY)      │      │ browser_navi.. │
+└──────────────┘      └─────────────────┘      └────────────────┘
+       │                      │                         │
+       │                      │ prints OAuth URL        │
+       │   user pastes URL    ▼                         │
+       │ ◀────────────────────────────────────────────  │
+       │                                                │
+       │   agent navigates the URL in shared window     ▼
+       │ ──────────────────────────────────────────▶ user logs in
+                                                    Google → 127.0.0.1:<port>
+                                                    callback fires → done
+```
+
+### Step-by-step
+
+**1. Ensure shared browser is running** (so user + agent see the same window):
+```bash
+cloak-cdp                # ~/.local/bin/cloak-cdp — idempotent
+```
+
+Then attach Hermes's `browser_*` toolset to that window. Two options:
+
+- **CLI session**: user types `/browser connect` in their Hermes prompt
+  (slash command, NOT dispatched through gateways/Telegram/Discord/etc.).
+- **Any context (gateway, cron, agent-driven)**: agent runs
+  `hermes config set browser.cdp_url http://127.0.0.1:9222`
+  (or edits `~/.hermes/config.yaml`). Picks up on next `browser_*` call.
+  Confirm by checking the `browser_navigate` response includes
+  `stealth_features: ["cdp_override"]` and `browser_console` returns a UA
+  with `Chrome/146` (real) instead of `HeadlessChrome/<version>` (default).
+
+See skill `playwright-cli` § "Interactive flows shared with the user" for
+the full pitfall list.
+
+**2. Start the auth flow.** Two paths — pick based on whether the agent has
+terminal access:
+
+- **Agent-driven (preferred when agent has `terminal` tool)**: invoke the
+  bundled driver script. It spawns gwcli in a properly-sized PTY, gets past
+  the Ink scope picker by sending `\r` (CR — `\n` is Down-Arrow due to
+  cooked-mode line discipline!), captures the OAuth URL, and keeps the gws
+  callback server alive until completion.
+  ```bash
+  drive_gwcli_auth.py <name>     # backgrounded — log to /tmp/gwauth.log
+  # then grep "URL_CAPTURED" /tmp/gwauth.log for the URL,
+  # navigate cloak-cdp browser to it, watch for "AUTH_SUCCESS"
+  ```
+  See `@scripts/drive_gwcli_auth.py` — install with `cp` to `~/.local/bin/`
+  (the script docstring includes the full pitfall list and rationale).
+
+- **User-driven (fallback when no terminal access)**: ask the user to run it
+  in a real interactive terminal:
+  ```bash
+  gwcli profiles auth <name>
+  # At the scope picker: press Enter to confirm.
+  # gws prints: "Open this URL in your browser to authenticate: https://..."
+  ```
+  User pastes URL back to the agent.
+
+**4. Agent navigates the shared browser to that URL:**
+```
+browser_navigate(<oauth-url>)
+```
+The user sees the Google account picker / consent screen in the cloak-cdp
+window. They click their account; if Google shows **"Google hasn't verified
+this app"**, click `Advanced` → `Go to <app> (unsafe)`. Then approve consent.
+
+**5. Google redirects to `http://127.0.0.1:<port>/?code=...`** — that's
+gws's callback server. It captures the code, exchanges for tokens, prints
+"Authentication successful. Encrypted credentials saved.", and exits.
+
+**6. Verify (real API call, not just `profiles status`):**
+```bash
+gwcli profiles status --format json --strict <name>   # token_valid:true
+gwcli --profile <name> agenda --days 1                # actually hits API
+```
+Note: `gwcli profiles status` returns `authenticated: true` even with revoked
+tokens — only the `details.token_valid` field reflects real grant state.
+Always check that field or run a smoke API call.
+
+### Pitfalls
+
+- **`browser_*` tools must be attached to the visible window before step 4.**
+  Otherwise `browser_navigate` opens the URL in headless agent-browser the
+  user can't see → flow stalls. Use `hermes config set browser.cdp_url
+  http://127.0.0.1:9222` (any context) or `/browser connect` (CLI only).
+- **PTY EOF ≠ child death.** When the gwcli node wrapper finishes its UI
+  work, the PTY master may see EOF while gws still listens on the callback
+  port. A naive driver that bails on first empty `read()` will kill gws
+  before the callback fires, leaving credentials.enc untouched. The bundled
+  `drive_gwcli_auth.py` handles this (checks `waitpid WNOHANG` before bailing).
+- **`\r` vs `\n` to Ink TUIs.** The gws scope picker accepts CR as Confirm
+  but treats LF as Down-Arrow. `process(action='submit')` and most agent
+  PTY APIs send LF — won't work. Drive via raw `os.write(fd, b'\r')`.
+- **The picker needs window-size.** Without `TIOCSWINSZ` (or COLUMNS/LINES
+  env), Ink stays mute and gws prints nothing. Naive `pty.fork()` setups
+  will hang silently.
+- **The callback port is dynamic** — extract from the URL gws prints, don't
+  hardcode 8080/9090.
+- **CSRF state token is single-use.** If the URL expires (user too slow,
+  multi-tab confusion), re-run `gwcli profiles auth <name>` to mint a fresh URL.
+- **Persistent profile speeds up subsequent auths.** After first OAuth, the
+  cloak-cdp profile remembers the Google session — re-authing the same
+  account skips password+2FA, often skips consent too.
+- **Unverified-app warning** ("Google hasn't verified this app") appears for
+  user-created OAuth clients on every fresh consent. Click `Advanced` →
+  `Go to <app> (unsafe)`. Skill `google-workspace` deliberately doesn't
+  hide this — confirm with the user before clicking.
+- **Multiple browser tabs confuse `browser_console`.** Hermes's CDP tab
+  selection isn't deterministic when multiple pages exist. To find which
+  tab has the OAuth flow, use `curl http://127.0.0.1:9222/json` — it lists
+  all tabs with URLs and titles.
+- **Driver deadline.** `drive_gwcli_auth.py` has a 10-minute deadline. For
+  accounts requiring fresh password+2FA+passkey (especially "Use another
+  account" flows), 2 minutes was insufficient and silently killed gws
+  before callback. Bump it further if needed for slow 2FA paths.
+- **Bulk re-auth: serialize, don't parallelize.** Each `gwcli profiles auth`
+  spawns its own callback port and consumes the visible browser window.
+
+### Quick command for the user
+
+When several profiles need re-auth at once (token expiry often hits every
+profile on the same client simultaneously). List your profiles with
+`gwcli profiles list --format json`, then serialize the re-auth:
+```bash
+for p in profile-a profile-b profile-c; do   # your profile names
+  echo "=== $p ==="
+  gwcli profiles auth "$p"
+  # press Enter on the picker, paste URL to agent, log in, repeat
+done
+```
+
+## Token longevity & monitoring
+
+### Why refresh tokens die
+
+Refresh tokens are *not* killed by lack of use within reasonable timeframes.
+They die when:
+
+| Cause | Trigger | Fix |
+|-------|---------|-----|
+| OAuth client in **"Testing"** publishing status | every 7 days | publish app to "In production" |
+| Test user authorization in Testing mode | every 7 days | move to In production OR add test users |
+| Refresh token unused for **6 months** | wall-clock idle | use it occasionally |
+| User changed Google password | event-driven | re-auth, no preventive fix |
+| User revoked from myaccount.google.com/permissions | event-driven | re-auth |
+| **>50 refresh tokens** outstanding for one client+account | rotation | older tokens get revoked silently |
+| `gws auth logout` ran | explicit revoke | re-auth |
+
+**Diagnosing your own setup**: check your OAuth client's publishing status in
+the Google Cloud console. If it's already **"In production"**, the 7-day
+testing-mode expiry is NOT your cause — the most likely remaining culprit is
+rotation past the 50-token cap (re-issuing creds many times during iteration).
+To mitigate, avoid spurious `gwcli profiles auth` runs unless necessary.
+
+Polling the API does NOT keep refresh tokens alive — the access-token
+refresh that happens silently on every API call is unrelated to the
+factors that revoke refresh tokens. A "ping cron" is wasted compute.
+
+### Health-check cron (recommended pattern)
+
+Set up a weekly silent watchdog that runs `gwcli profiles status --strict`
+across your profiles and only speaks up when a profile's `token_valid` flips
+false — delivering the exact remediation command (`gwcli profiles auth <name>`)
+when it does. Silent on success keeps it noise-free. Schedule it for a time you
+can act on the alert (e.g. Monday morning), since re-auth needs an interactive
+browser login.
 
 → Full reference: `@references/troubleshooting.md`
 
