@@ -156,6 +156,13 @@ export interface RunGwsAuthLoginOptions {
    * gwcli ≤ 2.1.0).
    */
   incognito?: boolean;
+  /**
+   * Auto-launch the OS default browser on the detected OAuth URL. Default: true.
+   * Set false (via `--no-open`) for headless/agent/CI runs where no controllable
+   * OS browser session exists — gwcli still tees the URL to the terminal so the
+   * caller can route it into its own browser.
+   */
+  autoOpen?: boolean;
 }
 
 /**
@@ -174,6 +181,7 @@ export function runGwsAuthLogin(
   options: RunGwsAuthLoginOptions = {}
 ): Promise<GwsRunResult> {
   const incognito = options.incognito ?? true;
+  const autoOpen = options.autoOpen ?? true;
   const openBrowser =
     options.openBrowser ?? ((url: string) => openInBrowser(url, { incognito }));
 
@@ -208,6 +216,12 @@ export function runGwsAuthLogin(
       const match = line.match(OAUTH_URL_REGEX);
       if (!match || !match[1]) return false;
       urlOpened = true;
+      if (!autoOpen) {
+        process.stderr.write(
+          `gwcli: --no-open set; not launching a browser. Open this URL yourself: ${match[1]}\n`
+        );
+        return true;
+      }
       try {
         openBrowser(match[1]);
       } catch {

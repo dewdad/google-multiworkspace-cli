@@ -255,6 +255,89 @@ describe('runGwsAuthLogin', () => {
     );
   });
 
+  it('autoOpen=false suppresses the browser launcher even when a URL is emitted', async () => {
+    const mockSpawn = vi.mocked(spawn);
+    const fake = makeFakeChild();
+    mockSpawn.mockReturnValue(fake.child as never);
+
+    const openBrowser = vi.fn();
+    const promise = runGwsAuthLogin('work', ['gmail'], { openBrowser, autoOpen: false });
+
+    fake.emitStdout(
+      'Open this URL:\n\n  https://accounts.google.com/o/oauth2/auth?client_id=abc&response_type=code\n'
+    );
+    fake.close(0);
+    const result = await promise;
+
+    expect(result.exitCode).toBe(0);
+    expect(openBrowser).not.toHaveBeenCalled();
+  });
+
+  it('autoOpen=false still tees the OAuth URL to the terminal', async () => {
+    const mockSpawn = vi.mocked(spawn);
+    const fake = makeFakeChild();
+    mockSpawn.mockReturnValue(fake.child as never);
+
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+    try {
+      const promise = runGwsAuthLogin('work', ['gmail'], {
+        openBrowser: vi.fn(),
+        autoOpen: false,
+      });
+
+      fake.emitStdout(
+        'Open this URL:\n\n  https://accounts.google.com/o/oauth2/auth?client_id=abc&response_type=code\n'
+      );
+      fake.close(0);
+      await promise;
+
+      const teed = writeSpy.mock.calls.map((c) => String(c[0])).join('');
+      expect(teed).toContain(
+        'https://accounts.google.com/o/oauth2/auth?client_id=abc&response_type=code'
+      );
+    } finally {
+      writeSpy.mockRestore();
+    }
+  });
+
+  it('autoOpen omitted (default true) invokes the browser launcher once', async () => {
+    const mockSpawn = vi.mocked(spawn);
+    const fake = makeFakeChild();
+    mockSpawn.mockReturnValue(fake.child as never);
+
+    const openBrowser = vi.fn();
+    const promise = runGwsAuthLogin('work', ['gmail'], { openBrowser });
+
+    fake.emitStdout(
+      'Open this URL:\n\n  https://accounts.google.com/o/oauth2/auth?client_id=abc&response_type=code\n'
+    );
+    fake.close(0);
+    await promise;
+
+    expect(openBrowser).toHaveBeenCalledTimes(1);
+  });
+
+  it('autoOpen=false wins over an injected openBrowser combined with incognito=false', async () => {
+    const mockSpawn = vi.mocked(spawn);
+    const fake = makeFakeChild();
+    mockSpawn.mockReturnValue(fake.child as never);
+
+    const openBrowser = vi.fn();
+    const promise = runGwsAuthLogin('work', ['gmail'], {
+      openBrowser,
+      autoOpen: false,
+      incognito: false,
+    });
+
+    fake.emitStdout(
+      'Open this URL:\n\n  https://accounts.google.com/o/oauth2/auth?client_id=abc&response_type=code\n'
+    );
+    fake.close(0);
+    await promise;
+
+    expect(openBrowser).not.toHaveBeenCalled();
+  });
+
   it('passes the correct env vars to gws (config dir, keyring backend) and the --services flag', async () => {
     const mockSpawn = vi.mocked(spawn);
     const fake = makeFakeChild();

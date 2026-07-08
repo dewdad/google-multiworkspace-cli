@@ -61,6 +61,7 @@ export function registerProfilesCommands(program: Command): void {
     .option('--display-name <name>', 'Human-friendly display name')
     .option('--no-auth', 'Skip authentication after creating profile')
     .option('--no-incognito', 'Open OAuth URL in default browser session instead of a private/incognito window')
+    .option('--no-open', 'Do not auto-launch a browser for the OAuth URL (headless/agent/CI); print it instead')
     .action(async (name: string, options) => {
       try {
         // Verify gws is available
@@ -82,6 +83,7 @@ export function registerProfilesCommands(program: Command): void {
           // the runner default (`true`) wins when no flag is given.
           const result = await runGwsAuthLogin(name, scopes, {
             incognito: options.incognito as boolean,
+            autoOpen: options.open as boolean,
           });
           if (result.exitCode === 0) {
             console.log(`Profile '${name}' authenticated successfully.`);
@@ -196,6 +198,7 @@ export function registerProfilesCommands(program: Command): void {
     .description('(Re-)authenticate a profile')
     .option('--scopes <list>', 'Comma-separated service names (defaults to the profile\'s stored scopes)')
     .option('--no-incognito', 'Open OAuth URL in default browser session instead of a private/incognito window')
+    .option('--no-open', 'Do not auto-launch a browser for the OAuth URL (headless/agent/CI); print it instead')
     .action(async (name: string, options) => {
       try {
         findGwsBinary();
@@ -232,6 +235,7 @@ export function registerProfilesCommands(program: Command): void {
         }
         const result = await runGwsAuthLogin(name, scopes, {
           incognito: options.incognito as boolean,
+          autoOpen: options.open as boolean,
         });
         if (result.exitCode === 0) {
           console.log(`Profile '${name}' authenticated successfully.`);
