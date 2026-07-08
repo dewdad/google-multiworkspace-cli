@@ -1,8 +1,22 @@
 #!/usr/bin/env python3
-"""Drive `gwcli profiles auth <name>` past its Ink scope picker and capture the
-Google OAuth URL it prints. Designed to be invoked by an agent: gets you to
-the URL handoff stage with zero human keystrokes on the terminal side, so the
-human only has to click in the browser.
+"""Capture the Google OAuth URL that `gwcli profiles auth <name>` prints, and
+hold the process open until the localhost callback completes.
+
+STATUS (current gwcli): this script is now an OPTIONAL convenience, not a
+requirement. `gwcli profiles auth` resolves the profile's stored scopes and
+passes them to gws as `--services`, which skips gws's interactive scope
+picker entirely — so the carriage-return "Confirm the picker" logic below is
+a no-op for any scoped profile (it only ever fires if gws is somehow launched
+with no services on a live TTY). gwcli also auto-launches the OS default
+browser on the detected URL; in an agent/headless context that OS tab is a
+dead window — ignore it and route the captured URL into your shared browser.
+A plain `gwcli profiles auth <name>` with stdout capture achieves the same
+hand-off; use this wrapper only for the tagged `[driver] URL_CAPTURED ` line
+and the fixed 10-minute deadline.
+
+Designed to be invoked by an agent: gets you to the URL handoff stage with
+zero human keystrokes on the terminal side, so the human only has to click in
+the browser.
 
 Usage:
     drive_gwcli_auth.py <profile_name>

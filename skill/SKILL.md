@@ -168,18 +168,25 @@ When `gwcli profiles status --strict` exits non-zero or any API call returns
 OAuth round-trip. **This is interactive — the user has to log in to Google in a
 real browser.** The clean way to run it with a Hermes agent in the loop:
 
-### Why the simple "just call `gwcli profiles auth <name>`" doesn't work for agents
+### What `gwcli profiles auth <name>` actually does (and why agents still need a shared browser)
 
-- `gws auth login` (the underlying Rust binary) **always shows a TUI scope
-  picker first** (Ink-style ratatui menu, "Enter to Confirm"). Even if you
-  pass `--scopes gmail,calendar,...` to `gwcli profiles auth`, the picker
-  still appears. It needs a real `\r` from a real keyboard — agent `write`/
-  `submit` over a PTY produces `\n`, which the picker reads as Down-Arrow.
-- After Confirm, gws prints the OAuth URL and starts a localhost callback
-  server on a **dynamic port** (e.g. `127.0.0.1:36767`).
-- gws **does not auto-open the URL** — it only prints "Open this URL in your
-  browser to authenticate:". So even on a graphical machine, the user has to
-  copy/paste it somewhere.
+- **No interactive scope picker in this flow.** `gwcli profiles auth`
+  resolves the profile's stored scopes (or an explicit `--scopes`) and passes
+  them to gws as `--services`, which skips gws's interactive scope picker
+  entirely. gwcli also *refuses* to run without scopes in a non-TTY
+  environment (a clear error, not a silent hang), so an agent never lands on a
+  picker that needs a keyboard `\r`. The auth flow is non-interactive on the
+  terminal side right up to the browser hand-off.
+- **gwcli auto-launches the OS default browser** (incognito, isolated
+  per-launch) the moment it detects the OAuth URL. On a human's graphical
+  machine that is the whole point. **For an agent it is useless or
+  counterproductive:** the agent has no OS GUI session it controls, so that
+  auto-opened tab is a dead window. The agent's job is to grab the URL that
+  gwcli *also tees to the terminal* and drive it in the **shared cloak-cdp
+  window** instead — then ignore (or close) the stray OS tab.
+- gws still prints the URL and holds a localhost callback server on a
+  **dynamic port** (e.g. `127.0.0.1:36767`) until the flow completes, so the
+  hand-off target is the same regardless of which browser opens it.
 
 ### The right workflow
 
@@ -225,27 +232,34 @@ the full pitfall list.
 **2. Start the auth flow.** Two paths — pick based on whether the agent has
 terminal access:
 
-- **Agent-driven (preferred when agent has `terminal` tool)**: invoke the
-  bundled driver script. It spawns gwcli in a properly-sized PTY, gets past
-  the Ink scope picker by sending `\r` (CR — `\n` is Down-Arrow due to
-  cooked-mode line discipline!), captures the OAuth URL, and keeps the gws
-  callback server alive until completion.
+- **Agent-driven (preferred when agent has `terminal` tool)**: run the auth
+  command directly and capture the URL from its output. Because scopes are
+  passed via `--services`, there is no picker to confirm — the command runs to
+  the URL hand-off with zero keystrokes, then blocks on the localhost callback
+  until you finish OAuth in the shared browser.
   ```bash
-  drive_gwcli_auth.py <name>     # backgrounded — log to /tmp/gwauth.log
-  # then grep "URL_CAPTURED" /tmp/gwauth.log for the URL,
-  # navigate cloak-cdp browser to it, watch for "AUTH_SUCCESS"
+  gwcli profiles auth <name> > /tmp/gwauth.log 2>&1 &   # backgrounded
+  # grep the printed consent URL, then drive cloak-cdp to it:
+  grep -o 'https://accounts.google.com/o/oauth2/[^ ]*' /tmp/gwauth.log
+  # gwcli also auto-opens an OS browser tab — ignore/close it; it is NOT the
+  # shared window. Watch the log for "Authentication successful".
   ```
-  See `@scripts/drive_gwcli_auth.py` — install with `cp` to `~/.local/bin/`
-  (the script docstring includes the full pitfall list and rationale).
+  An optional convenience wrapper, `@scripts/drive_gwcli_auth.py <name>`,
+  captures the URL on a `[driver] URL_CAPTURED ` line and holds the process
+  open for a fixed 10-minute window. It is **not required to get past a
+  picker** (there is none for a scoped profile) — use it only if you want the
+  tagged-line capture or the fixed deadline. Install with `cp` to
+  `~/.local/bin/`.
 
 - **User-driven (fallback when no terminal access)**: ask the user to run it
-  in a real interactive terminal:
+  in a real terminal:
   ```bash
   gwcli profiles auth <name>
-  # At the scope picker: press Enter to confirm.
-  # gws prints: "Open this URL in your browser to authenticate: https://..."
+  # No picker prompt. It prints "Open this URL in your browser to
+  # authenticate: https://..." and auto-opens the OS browser.
   ```
-  User pastes URL back to the agent.
+  User pastes the URL back to the agent (or, if they prefer their own
+  browser, just completes the login in the auto-opened window).
 
 **4. Agent navigates the shared browser to that URL:**
 ```
@@ -274,17 +288,17 @@ Always check that field or run a smoke API call.
   Otherwise `browser_navigate` opens the URL in headless agent-browser the
   user can't see → flow stalls. Use `hermes config set browser.cdp_url
   http://127.0.0.1:9222` (any context) or `/browser connect` (CLI only).
-- **PTY EOF ≠ child death.** When the gwcli node wrapper finishes its UI
-  work, the PTY master may see EOF while gws still listens on the callback
-  port. A naive driver that bails on first empty `read()` will kill gws
-  before the callback fires, leaving credentials.enc untouched. The bundled
-  `drive_gwcli_auth.py` handles this (checks `waitpid WNOHANG` before bailing).
-- **`\r` vs `\n` to Ink TUIs.** The gws scope picker accepts CR as Confirm
-  but treats LF as Down-Arrow. `process(action='submit')` and most agent
-  PTY APIs send LF — won't work. Drive via raw `os.write(fd, b'\r')`.
-- **The picker needs window-size.** Without `TIOCSWINSZ` (or COLUMNS/LINES
-  env), Ink stays mute and gws prints nothing. Naive `pty.fork()` setups
-  will hang silently.
+- **Ignore the auto-opened OS browser tab.** gwcli opens the consent URL in
+  the OS default browser (incognito) as soon as it detects it. In the
+  agent/shared-cdp flow that tab is a dead end the agent can't see — drive the
+  captured URL in the cloak-cdp window instead and close/ignore the OS tab.
+  Don't confuse it with the shared window.
+- **PTY EOF ≠ child death (only relevant if you use `drive_gwcli_auth.py`).**
+  When the gwcli wrapper finishes its foreground output the PTY master can see
+  EOF while gws still listens on the callback port. A naive driver that bails
+  on the first empty `read()` would kill gws before the callback fires,
+  leaving credentials.enc untouched. The bundled script guards against this
+  (checks `waitpid WNOHANG` before bailing).
 - **The callback port is dynamic** — extract from the URL gws prints, don't
   hardcode 8080/9090.
 - **CSRF state token is single-use.** If the URL expires (user too slow,
@@ -316,7 +330,7 @@ profile on the same client simultaneously). List your profiles with
 for p in profile-a profile-b profile-c; do   # your profile names
   echo "=== $p ==="
   gwcli profiles auth "$p"
-  # press Enter on the picker, paste URL to agent, log in, repeat
+  # no picker — grab the printed URL, drive the shared browser, log in, repeat
 done
 ```
 
