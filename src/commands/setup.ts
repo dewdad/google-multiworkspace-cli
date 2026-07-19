@@ -22,7 +22,7 @@ const MIN_GWS_VERSION = '0.20.0';
  *
  * Bootstrapping note: gwcli itself must already be installed for this command
  * to run. Users install gwcli via
- * `npm install -g github:dewdad/google-multiworkspace-cli`
+ * `npm install -g github:dewdad/multi-gws-cli`
  * (the package is not on the npm registry yet), then `gwcli setup` handles the
  * rest (gws + config dirs).
  */

@@ -44,7 +44,7 @@ function tryLocalBuild() {
 // build is available. The package is not on the npm registry yet (see Issue 1
 // in plans/install-and-bootstrap-fixes), so the install vector is the repo URL.
 function tryNpx() {
-  return 'npx --yes github:dewdad/google-multiworkspace-cli';
+  return 'npx --yes github:dewdad/multi-gws-cli';
 }
 
 const command = tryGlobal() || tryLocalBuild() || tryNpx();

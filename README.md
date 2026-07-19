@@ -27,7 +27,7 @@ The official `gws` CLI is excellent but ships with a single global credential st
 
 ```bash
 # 1. Install gwcli (from GitHub — requires git on PATH; npm runs `tsc` automatically via the `prepare` script)
-npm install -g github:dewdad/google-multiworkspace-cli
+npm install -g github:dewdad/multi-gws-cli
 
 # 2. Install gws + create config dirs (idempotent)
 gwcli setup
@@ -201,7 +201,7 @@ gwcli drive files list --params '{"pageSize":20}' --format json
 | `gws binary not found`           | `gws` not installed / not on PATH            | `gwcli setup`, or set `gwsBinary` in config   |
 | `preflight` exits `63`           | `gws` missing/outdated                       | `gwcli setup`                                 |
 | `preflight` exits `64`           | No profiles configured                       | `gwcli profiles add <name> --client <path>`   |
-| `gwcli: command not found`       | `gwcli` not installed globally               | `npm install -g github:dewdad/google-multiworkspace-cli` |
+| `gwcli: command not found`       | `gwcli` not installed globally               | `npm install -g github:dewdad/multi-gws-cli` |
 | Auth errors during API call      | Profile token expired/revoked                | `gwcli profiles auth <name>`                  |
 | `keep …` → `403 PERMISSION_DENIED` | Personal `@gmail.com` (Keep API is Workspace-only) | Expected on consumer accounts. See [`skill/references/keep.md`](skill/references/keep.md#consumer-keep-alternatives-personal-gmailcom) for unofficial community alternatives |
 
@@ -210,8 +210,8 @@ For the full exit-code table (including `gws`'s 1/2 runtime codes), see [`skill/
 ## Development
 
 ```bash
-git clone https://github.com/dewdad/google-multiworkspace-cli.git
-cd google-multiworkspace-cli
+git clone https://github.com/dewdad/multi-gws-cli.git
+cd multi-gws-cli
 npm install
 npm run build       # tsc → dist/
 npm test            # vitest

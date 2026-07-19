@@ -11,7 +11,7 @@ metadata:
   version: "2.3.0"
   tags: "google, workspace, gmail, calendar, drive, docs, sheets, keep, tasks, multi-account"
   requires-bins: "node, gwcli"
-  homepage: "https://github.com/dewdad/google-multiworkspace-cli"
+  homepage: "https://github.com/dewdad/multi-gws-cli"
   license: "MIT"
   self-improving: true
 ---
@@ -73,7 +73,7 @@ gwcli preflight --json
 | `0` | ready | proceed |
 | `63` | `gws` binary missing/outdated | `gwcli setup` (installs/upgrades `gws` to latest by default) |
 | `64` | no profiles configured | see "Account Setup" below |
-| `127` (or "command not found") | `gwcli` itself not installed | `npm install -g github:dewdad/google-multiworkspace-cli`, then re-run |
+| `127` (or "command not found") | `gwcli` itself not installed | `npm install -g github:dewdad/multi-gws-cli`, then re-run |
 
 > **These are distinct from runtime exit codes** (1, 2) emitted by `gws` API calls. See [`references/troubleshooting.md`](references/troubleshooting.md) for the full table.
 
@@ -85,7 +85,7 @@ On **first activation** (or whenever preflight returns `63`/`127`):
 
 ```bash
 # Only if `gwcli` itself is missing from PATH:
-npm install -g github:dewdad/google-multiworkspace-cli
+npm install -g github:dewdad/multi-gws-cli
 
 # Install/repair config dirs AND pull the LATEST `gws` binary (default behavior).
 # Run this as part of skill activation so `gws` never drifts behind the docs.

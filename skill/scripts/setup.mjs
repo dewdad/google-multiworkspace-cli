@@ -70,7 +70,7 @@ step('install-gwcli', () => {
     log('  Installing google-workspace-cli globally from GitHub...');
     // Not on the npm registry yet — install directly from the GitHub repo.
     // npm will clone, run `prepare` (tsc) to build dist/, then link the gwcli bin.
-    execSync('npm install -g github:dewdad/google-multiworkspace-cli', { stdio: 'pipe', timeout: 180000, ...shellOpt });
+    execSync('npm install -g github:dewdad/multi-gws-cli', { stdio: 'pipe', timeout: 180000, ...shellOpt });
     return 'installed';
   }
 });

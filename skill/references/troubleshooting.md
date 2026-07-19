@@ -12,7 +12,7 @@
 | `0` | Ready | proceed |
 | `63` | `gws` binary missing or below minimum version | `gwcli setup` |
 | `64` | No profiles configured | `gwcli profiles add <name> --client <path>` |
-| `127` (or shell "command not found") | `gwcli` itself not on PATH | `npm install -g github:dewdad/google-multiworkspace-cli`, then `gwcli setup` |
+| `127` (or shell "command not found") | `gwcli` itself not on PATH | `npm install -g github:dewdad/multi-gws-cli`, then `gwcli setup` |
 
 ## Runtime exit codes (gws API passthrough)
 
@@ -94,7 +94,7 @@ $env:PATH -split ';' | Where-Object { $_ -match 'npm' }
 Rebuild gwcli:
 ```bash
 npm uninstall -g google-workspace-cli
-npm install -g github:dewdad/google-multiworkspace-cli
+npm install -g github:dewdad/multi-gws-cli
 ```
 
 > The package self-identifies as `google-workspace-cli` (see `package.json`), so `npm uninstall -g google-workspace-cli` is correct even though the install vector is the GitHub URL.
