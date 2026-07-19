@@ -39,3 +39,38 @@ If this skill is installed via `skillshare` from a hub, edits stay local to your
 3. The skillshare hub picks up changes on the next `skillshare sync`.
 
 There is no automatic phone-home or feedback channel from this skill — improvements are entirely opt-in by the human user.
+
+## Changelog
+
+### 2.3.0
+- **Operating principle added (top of SKILL.md): "the binary is the source of
+  truth."** Establishes a fast-path → self-heal → live-state hierarchy: use the
+  documented example first, but on any surface mismatch trust `gwcli <cmd>
+  --help` / `gwcli setup` over the prose, and query the CLI
+  (`profiles list/status`, `preflight`, `doctor`) for live system facts instead
+  of assuming. Explicitly scopes what the docs still own and the CLI can't
+  self-report: operational gotchas, the interactive OAuth flow, and decision
+  policy. Motivated by the v2.2.0 root cause — a doc that asserted a stale flag
+  surface silently broke agents; the binary was self-describing the whole time.
+
+### 2.2.0
+- **Flag-surface correction (gws 0.22.x).** Docs previously used `--body` and a
+  `--fields` flag that **do not exist** in the shipped `gws` binary. Corrected
+  across SKILL.md + all references: request body → **`--json`**; field masks →
+  a **`"fields"` key inside `--params`**. Verified live against gws 0.22.5
+  (`--help` + a working masked Gmail list call). Root cause was a doc bug, not
+  version drift (installed == upstream 2.1.0; the gwcli wrapper is a pure
+  argv passthrough and used 0 bad flags).
+- **New: binary upload docs.** Documented `--upload` / `--upload-content-type`
+  for Drive create and Gmail send, including the constraint that `--upload`
+  only accepts a **relative path inside the current working directory**.
+- **New: output-parsing note.** JSON is on stdout; the `Using keyring backend:
+  file` line is on stderr — capture stdout only before parsing.
+- **New: activation keeps `gws` current.** Step 0a now runs `gwcli setup`
+  (installs latest gws by default; `--gws-version` to pin) on activation and on
+  preflight `63`. (Corrected an earlier draft that referenced a nonexistent
+  `--update` flag.)
+- **New: profile organization.** Added on-disk layout + naming/`--display-name`
+  conventions to `references/profiles.md`.
+- **Fix: typo** — stray quote in the drive.md "Search across all files" example.
+- **Keep caveat** surfaced in the command router (Workspace-only; 403 on @gmail.com).

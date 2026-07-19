@@ -15,7 +15,7 @@ gwcli --profile work agenda --calendar team@company.com --days 7
 ## API Passthrough Commands
 
 ```bash
-gwcli [--profile <name>] calendar <resource> <method> --params '<json>' [--body '<json>']
+gwcli [--profile <name>] calendar <resource> <method> --params '<json>' [--json '<request-body>']
 ```
 
 ### List Calendars
@@ -49,7 +49,7 @@ gwcli calendar events get --params '{"calendarId":"primary","eventId":"<event-id
 
 ### Create an Event
 ```bash
-gwcli calendar events insert --params '{"calendarId":"primary"}' --body '{
+gwcli calendar events insert --params '{"calendarId":"primary"}' --json '{
   "summary": "Team Standup",
   "description": "Daily sync",
   "start": {"dateTime": "2024-06-15T09:00:00-07:00", "timeZone": "America/Los_Angeles"},
@@ -61,7 +61,7 @@ gwcli calendar events insert --params '{"calendarId":"primary"}' --body '{
 
 ### Update an Event
 ```bash
-gwcli calendar events patch --params '{"calendarId":"primary","eventId":"<id>"}' --body '{
+gwcli calendar events patch --params '{"calendarId":"primary","eventId":"<id>"}' --json '{
   "summary": "Updated Title",
   "start": {"dateTime": "2024-06-15T10:00:00-07:00"}
 }'
@@ -115,5 +115,5 @@ Empty `items[]` = free.
 
 ### "Schedule a meeting"
 ```bash
-gwcli calendar events insert --params '{"calendarId":"primary"}' --body '{"summary":"...","start":{"dateTime":"..."},"end":{"dateTime":"..."}}'
+gwcli calendar events insert --params '{"calendarId":"primary"}' --json '{"summary":"...","start":{"dateTime":"..."},"end":{"dateTime":"..."}}'
 ```

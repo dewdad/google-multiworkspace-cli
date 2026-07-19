@@ -8,6 +8,61 @@ Profiles are named Google accounts. Each profile stores OAuth credentials indepe
 - **Config dir** = `~/.config/gwcli/` (Linux/Mac) or `%APPDATA%\gwcli\` (Windows)
 - **Resolution order**: `--profile` flag → `GWCLI_PROFILE` env → default profile → error
 
+## On-disk layout (managed by the CLI — do not hand-edit)
+
+```
+<config-dir>/
+├── config.json                 # global: version, defaultProfile, gwsBinary, settings
+└── profiles/
+    └── <profile-name>/
+        ├── meta.json           # name, displayName, email, scopes, createdAt,
+        │                       #   lastUsed, clientSecretSource, tags[]
+        └── gws/                # per-profile, isolated credential store
+            ├── credentials.enc
+            ├── .encryption_key
+            ├── client_secret.json
+            ├── token_cache.json
+            └── cache/          # per-API discovery cache (gmail_v1.json, …)
+```
+
+Each profile is fully self-contained under `profiles/<name>/`, which is what
+makes cross-profile parallelism safe (see Concurrency Rules). **Never move,
+rename, or edit these files by hand** — use `gwcli profiles rename` / `remove`
+so `config.json` (e.g. `defaultProfile`) stays consistent. To relocate the whole
+store, set `GOOGLE_WORKSPACE_CLI_CONFIG_DIR` / the gwcli config dir rather than
+moving directories.
+
+## Profile organization & naming conventions
+
+Profile **names** are the primary organizational handle (they're what you type
+in `--profile`), so keep them short, lowercase, and predictable. A good scheme
+for multi-account / multi-project setups:
+
+- **By role/owner:** `personal`, `work`, `avital`, `ops`.
+- **By client/project (namespaced):** `client-acme`, `client-globex`,
+  `proj-zikhron`. A `<kind>-<slug>` prefix keeps related accounts grouped
+  alphabetically in `profiles list`.
+- **One identity per profile.** Don't reuse a profile for two Google accounts —
+  add a second profile. Credentials are isolated per profile by design.
+
+Attach a human label with **`--display-name`** at add time (stored in
+`meta.json.displayName`, shown in `profiles list`) so a terse name like
+`proj-zikhron` still reads clearly:
+
+```bash
+gwcli profiles add proj-zikhron --client ./secret.json --display-name "Zikhron build (avitalidit@gmail.com)"
+```
+
+Housekeeping tips:
+- Set the **most-used** profile as default (`gwcli profiles set-default <name>`)
+  so bare commands "just work"; pass `--profile` only for the exceptions.
+- `meta.json` records `email`, `scopes`, `lastUsed`, and a `tags[]` array. `tags`
+  is currently populated by the CLI/metadata (there is **no `--tags` flag** on
+  `add` as of gws 0.22.x) — treat it as read-only metadata for now, and rely on
+  the naming/`--display-name` scheme above for organization.
+- Rename freely with `gwcli profiles rename <old> <new>` if a scheme evolves —
+  it updates `config.json` references for you.
+
 ## Commands
 
 ### List All Profiles
@@ -94,13 +149,13 @@ $env:GWCLI_PROFILE = "personal"; gwcli agenda --days 3
 ```bash
 # POSIX (bash/zsh)
 work_emails=$(gwcli --profile work gmail users messages list --params '{"userId":"me","q":"meeting invite","maxResults":1}')
-gwcli --profile personal calendar events insert --params '{"calendarId":"primary"}' --body '<event>'
+gwcli --profile personal calendar events insert --params '{"calendarId":"primary"}' --json '<event>'
 ```
 
 ```powershell
 # PowerShell
 $work_emails = gwcli --profile work gmail users messages list --params '{"userId":"me","q":"meeting invite","maxResults":1}'
-gwcli --profile personal calendar events insert --params '{"calendarId":"primary"}' --body '<event>'
+gwcli --profile personal calendar events insert --params '{"calendarId":"primary"}' --json '<event>'
 ```
 
 ### Concurrency Rules

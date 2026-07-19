@@ -2,8 +2,17 @@
 
 All Gmail commands use the gws API passthrough pattern:
 ```bash
-gwcli [--profile <name>] gmail <resource> <method> --params '<json>' [--body '<json>'] [--fields '<field-mask>']
+gwcli [--profile <name>] gmail <resource> <method> --params '<json>' [--json '<request-body>'] [--upload <path> --upload-content-type <mime>]
 ```
+
+> **Flag surface (gws 0.22.x — verified against `--help`).** The request body
+> is passed with **`--json`**, NOT `--body`. There is **no `--fields` flag** —
+> field masks go **inside** `--params` as a `"fields"` key (see "Field Masks").
+> Binary content (attachments) uses **`--upload`** (see "Send with attachment").
+> **Output:** the JSON payload is on **stdout**; a `Using keyring backend: file`
+> line is written to **stderr**. When capturing, read stdout only (or append
+> `2>/dev/null`) before `JSON.parse` / `json.loads`, or strip any leading
+> non-JSON line.
 
 ## Common Operations
 
@@ -31,7 +40,7 @@ gwcli gmail users threads get --params '{"userId":"me","id":"<thread-id>","forma
 ### Send a Message
 ```bash
 # Raw RFC 2822 base64url-encoded
-gwcli gmail users messages send --params '{"userId":"me"}' --body '{"raw":"<base64url-encoded-message>"}'
+gwcli gmail users messages send --params '{"userId":"me"}' --json '{"raw":"<base64url-encoded-message>"}'
 ```
 
 To construct the `raw` field, base64url-encode an RFC 2822 message:
@@ -46,26 +55,36 @@ Message body here.
 
 ### Create a Draft
 ```bash
-gwcli gmail users drafts create --params '{"userId":"me"}' --body '{"message":{"raw":"<base64url>"}}'
+gwcli gmail users drafts create --params '{"userId":"me"}' --json '{"message":{"raw":"<base64url>"}}'
 ```
 
 ### Reply to a Message
 ```bash
 # Include In-Reply-To and References headers in the raw message
 # Set threadId to keep in same thread
-gwcli gmail users messages send --params '{"userId":"me"}' --body '{"raw":"<base64url>","threadId":"<thread-id>"}'
+gwcli gmail users messages send --params '{"userId":"me"}' --json '{"raw":"<base64url>","threadId":"<thread-id>"}'
+```
+
+### Send with an attachment
+```bash
+# The message metadata/body goes in --json; the binary file in --upload.
+# NOTE: --upload paths must be RELATIVE and inside the current working
+# directory (the CLI rejects absolute paths or paths outside CWD). cd first.
+gwcli gmail users messages send --params '{"userId":"me"}' \
+  --json '{"raw":"<base64url>"}' \
+  --upload ./attachment.pdf --upload-content-type application/pdf
 ```
 
 ### Modify Labels (archive, star, mark read)
 ```bash
 # Archive (remove INBOX label)
-gwcli gmail users messages modify --params '{"userId":"me","id":"<id>"}' --body '{"removeLabelIds":["INBOX"]}'
+gwcli gmail users messages modify --params '{"userId":"me","id":"<id>"}' --json '{"removeLabelIds":["INBOX"]}'
 
 # Mark as read
-gwcli gmail users messages modify --params '{"userId":"me","id":"<id>"}' --body '{"removeLabelIds":["UNREAD"]}'
+gwcli gmail users messages modify --params '{"userId":"me","id":"<id>"}' --json '{"removeLabelIds":["UNREAD"]}'
 
 # Star
-gwcli gmail users messages modify --params '{"userId":"me","id":"<id>"}' --body '{"addLabelIds":["STARRED"]}'
+gwcli gmail users messages modify --params '{"userId":"me","id":"<id>"}' --json '{"addLabelIds":["STARRED"]}'
 ```
 
 ### Delete a Message
@@ -80,10 +99,11 @@ gwcli gmail users labels list --params '{"userId":"me"}'
 
 ## Field Masks
 
-Use `--fields` to reduce response size:
+Reduce response size by adding a `"fields"` key **inside** `--params` (there is
+no `--fields` flag):
 ```bash
-gwcli gmail users messages list --params '{"userId":"me"}' --fields 'messages(id,threadId,snippet,labelIds)'
-gwcli gmail users messages get --params '{"userId":"me","id":"<id>"}' --fields 'payload(headers,body),snippet'
+gwcli gmail users messages list --params '{"userId":"me","fields":"messages(id,threadId,snippet,labelIds)"}'
+gwcli gmail users messages get --params '{"userId":"me","id":"<id>","fields":"payload(headers,body),snippet"}'
 ```
 
 ## Pagination
@@ -97,7 +117,7 @@ gwcli gmail users messages list --params '{"userId":"me","maxResults":20,"pageTo
 
 ### Check for new unread emails
 ```bash
-gwcli gmail users messages list --params '{"userId":"me","q":"is:unread","maxResults":5}' --fields 'messages(id,threadId),resultSizeEstimate'
+gwcli gmail users messages list --params '{"userId":"me","q":"is:unread","maxResults":5,"fields":"messages(id,threadId),resultSizeEstimate"}'
 ```
 
 ### Search and summarize
@@ -105,5 +125,5 @@ gwcli gmail users messages list --params '{"userId":"me","q":"is:unread","maxRes
 # Get IDs
 ids=$(gwcli gmail users messages list --params '{"userId":"me","q":"subject:invoice","maxResults":3}')
 # Get each message
-gwcli gmail users messages get --params '{"userId":"me","id":"<id>","format":"metadata"}' --fields 'payload/headers'
+gwcli gmail users messages get --params '{"userId":"me","id":"<id>","format":"metadata","fields":"payload/headers"}'
 ```

@@ -2,7 +2,7 @@
 
 All Tasks commands use the gws API passthrough pattern:
 ```bash
-gwcli [--profile <name>] tasks <resource> <method> --params '<json>' [--body '<json>']
+gwcli [--profile <name>] tasks <resource> <method> --params '<json>' [--json '<request-body>']
 ```
 
 ## Task Lists
@@ -19,12 +19,12 @@ gwcli tasks tasklists get --params '{"tasklist":"<tasklist-id>"}'
 
 ### Create a Task List
 ```bash
-gwcli tasks tasklists insert --body '{"title":"Work Projects"}'
+gwcli tasks tasklists insert --json '{"title":"Work Projects"}'
 ```
 
 ### Update a Task List
 ```bash
-gwcli tasks tasklists patch --params '{"tasklist":"<tasklist-id>"}' --body '{"title":"Renamed List"}'
+gwcli tasks tasklists patch --params '{"tasklist":"<tasklist-id>"}' --json '{"title":"Renamed List"}'
 ```
 
 ### Delete a Task List
@@ -57,26 +57,26 @@ gwcli tasks tasks get --params '{"tasklist":"<tasklist-id>","task":"<task-id>"}'
 ### Create a Task
 ```bash
 # Simple task
-gwcli tasks tasks insert --params '{"tasklist":"<tasklist-id>"}' --body '{
+gwcli tasks tasks insert --params '{"tasklist":"<tasklist-id>"}' --json '{
   "title": "Review pull request",
   "notes": "Check the auth module changes",
   "due": "2024-06-15T00:00:00Z"
 }'
 
 # Subtask (insert after parent)
-gwcli tasks tasks insert --params '{"tasklist":"<tasklist-id>","parent":"<parent-task-id>"}' --body '{
+gwcli tasks tasks insert --params '{"tasklist":"<tasklist-id>","parent":"<parent-task-id>"}' --json '{
   "title": "Check test coverage"
 }'
 
 # Insert at specific position
-gwcli tasks tasks insert --params '{"tasklist":"<tasklist-id>","previous":"<sibling-task-id>"}' --body '{
+gwcli tasks tasks insert --params '{"tasklist":"<tasklist-id>","previous":"<sibling-task-id>"}' --json '{
   "title": "After this task"
 }'
 ```
 
 ### Update a Task
 ```bash
-gwcli tasks tasks patch --params '{"tasklist":"<tasklist-id>","task":"<task-id>"}' --body '{
+gwcli tasks tasks patch --params '{"tasklist":"<tasklist-id>","task":"<task-id>"}' --json '{
   "title": "Updated title",
   "notes": "Added details",
   "due": "2024-06-20T00:00:00Z"
@@ -85,14 +85,14 @@ gwcli tasks tasks patch --params '{"tasklist":"<tasklist-id>","task":"<task-id>"
 
 ### Complete a Task
 ```bash
-gwcli tasks tasks patch --params '{"tasklist":"<tasklist-id>","task":"<task-id>"}' --body '{
+gwcli tasks tasks patch --params '{"tasklist":"<tasklist-id>","task":"<task-id>"}' --json '{
   "status": "completed"
 }'
 ```
 
 ### Uncomplete a Task
 ```bash
-gwcli tasks tasks patch --params '{"tasklist":"<tasklist-id>","task":"<task-id>"}' --body '{
+gwcli tasks tasks patch --params '{"tasklist":"<tasklist-id>","task":"<task-id>"}' --json '{
   "status": "needsAction",
   "completed": null
 }'
@@ -154,21 +154,21 @@ gwcli tasks tasks list --params '{"tasklist":"@default","dueMin":"2024-06-10T00:
 
 ### "Add a task"
 ```bash
-gwcli tasks tasks insert --params '{"tasklist":"@default"}' --body '{"title":"New task","due":"2024-06-15T00:00:00Z"}'
+gwcli tasks tasks insert --params '{"tasklist":"@default"}' --json '{"title":"New task","due":"2024-06-15T00:00:00Z"}'
 ```
 
 ### "Mark task done"
 ```bash
-gwcli tasks tasks patch --params '{"tasklist":"<tasklist-id>","task":"<task-id>"}' --body '{"status":"completed"}'
+gwcli tasks tasks patch --params '{"tasklist":"<tasklist-id>","task":"<task-id>"}' --json '{"status":"completed"}'
 ```
 
 ### "Create a project with subtasks"
 ```bash
 # Create parent
-gwcli tasks tasks insert --params '{"tasklist":"<id>"}' --body '{"title":"Project Alpha"}'
+gwcli tasks tasks insert --params '{"tasklist":"<id>"}' --json '{"title":"Project Alpha"}'
 # Create subtasks under parent
-gwcli tasks tasks insert --params '{"tasklist":"<id>","parent":"<parent-id>"}' --body '{"title":"Phase 1: Research"}'
-gwcli tasks tasks insert --params '{"tasklist":"<id>","parent":"<parent-id>"}' --body '{"title":"Phase 2: Implement"}'
+gwcli tasks tasks insert --params '{"tasklist":"<id>","parent":"<parent-id>"}' --json '{"title":"Phase 1: Research"}'
+gwcli tasks tasks insert --params '{"tasklist":"<id>","parent":"<parent-id>"}' --json '{"title":"Phase 2: Implement"}'
 ```
 
 ## Pagination

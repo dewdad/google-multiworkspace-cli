@@ -28,7 +28,7 @@ The remainder of this reference applies **only to Workspace profiles** where an 
 
 All Keep commands use the gws API passthrough pattern:
 ```bash
-gwcli [--profile <name>] keep <resource> <method> --params '<json>' [--body '<json>']
+gwcli [--profile <name>] keep <resource> <method> --params '<json>' [--json '<request-body>']
 ```
 
 ## Common Operations
@@ -49,13 +49,13 @@ The `name` field uses the format `notes/<note-id>`.
 ### Create a Note
 ```bash
 # Simple text note
-gwcli keep notes create --body '{
+gwcli keep notes create --json '{
   "title": "Shopping List",
   "body": {"text": {"text": "Milk\nEggs\nBread"}}
 }'
 
 # List note (checkboxes)
-gwcli keep notes create --body '{
+gwcli keep notes create --json '{
   "title": "TODO",
   "body": {"list": {"listItems": [
     {"text": {"text": "Buy groceries"}, "checked": false},
@@ -115,7 +115,7 @@ gwcli keep notes permissions list --params '{"parent":"notes/<note-id>"}'
 
 ### Share a Note
 ```bash
-gwcli keep notes permissions create --params '{"parent":"notes/<note-id>"}' --body '{
+gwcli keep notes permissions create --params '{"parent":"notes/<note-id>"}' --json '{
   "email": "colleague@example.com",
   "role": "WRITER"
 }'
@@ -132,12 +132,12 @@ gwcli keep notes list --params '{"pageSize":20}'
 
 ### "Create a quick note"
 ```bash
-gwcli keep notes create --body '{"title":"Quick Note","body":{"text":{"text":"Content here"}}}'
+gwcli keep notes create --json '{"title":"Quick Note","body":{"text":{"text":"Content here"}}}'
 ```
 
 ### "Create a checklist"
 ```bash
-gwcli keep notes create --body '{
+gwcli keep notes create --json '{
   "title": "Checklist",
   "body": {"list": {"listItems": [
     {"text": {"text": "Item 1"}, "checked": false},

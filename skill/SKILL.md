@@ -8,7 +8,7 @@ description: |
   accessing Google Docs/Sheets, or any Google Workspace task for a specific user account.
 argument-hint: "[service] [action] [--profile name] [--format json]"
 metadata:
-  version: "2.1.0"
+  version: "2.3.0"
   tags: "google, workspace, gmail, calendar, drive, docs, sheets, keep, tasks, multi-account"
   requires-bins: "node, gwcli"
   homepage: "https://github.com/dewdad/google-multiworkspace-cli"
@@ -18,7 +18,41 @@ metadata:
 
 # Google Workspace
 
+## Operating principle — the binary is the source of truth
+
+This skill is a **fast path with a self-healing escape hatch**, not a frozen
+spec. When the documented surface and the installed binary disagree, **the
+binary wins.** Follow this hierarchy:
+
+1. **Fast path:** use the documented command/example directly — that's what the
+   examples are for. Don't shell out to `--help` before routine calls.
+2. **Self-heal on mismatch:** if a command errors with `unexpected argument`,
+   an unknown flag, or otherwise behaves unlike the docs, run
+   `gwcli <cmd> --help` (and/or `gwcli setup` to update `gws`) and **trust its
+   output over this document.** Adjust and proceed — then, per the
+   `self-improving` protocol, fix the doc.
+3. **Live state, not memory:** for facts about the system — which profiles
+   exist, auth validity, versions, readiness — **query the CLI**
+   (`gwcli profiles list --format json`, `profiles status --strict`,
+   `preflight --json`, `doctor`) rather than assuming. These are authoritative
+   and self-updating; prose goes stale.
+
+What this doc still owns (the CLI can **not** self-report these — don't expect
+`--help` to reveal them): **operational gotchas** (e.g. `--upload` is CWD-only,
+the keyring line on stderr, same-profile parallelism corrupts the token cache,
+Keep 403s on @gmail.com), the **interactive OAuth / shared-browser flow**, and
+**decision policy** (draft-vs-send, cross-account safety). Treat the gotcha and
+policy sections as canonical; treat the flag/command surface as a cached hint
+that `--help` can override.
+
 > **`gws` passthrough output is JSON by default.** Native gwcli commands (`profiles list`, `profiles status`) emit JSON when stdout is piped, table when interactive — pass `--format json` to force JSON unconditionally.
+>
+> **Parsing output (important).** The JSON payload is written to **stdout**; a
+> `Using keyring backend: file` line is written to **stderr**. When a caller
+> merges the two streams (`2>&1`, some subprocess wrappers), that line prefixes
+> the JSON and naive `JSON.parse` / `json.loads` fails on
+> `Expecting value: line 1 column 1`. Fix: capture **stdout only** (or append
+> `2>/dev/null`), or strip any leading non-JSON line before parsing.
 
 ## Step 0 — Preflight (MANDATORY, every invocation)
 
@@ -37,7 +71,7 @@ gwcli preflight --json
 | Exit | Meaning | Action |
 |------|---------|--------|
 | `0` | ready | proceed |
-| `63` | `gws` binary missing/outdated | `gwcli setup` |
+| `63` | `gws` binary missing/outdated | `gwcli setup` (installs/upgrades `gws` to latest by default) |
 | `64` | no profiles configured | see "Account Setup" below |
 | `127` (or "command not found") | `gwcli` itself not installed | `npm install -g github:dewdad/google-multiworkspace-cli`, then re-run |
 
@@ -45,14 +79,31 @@ gwcli preflight --json
 
 **Do NOT announce preflight to the user.** Only speak if remediation is needed.
 
-## Step 0a — First-time install (only if `gwcli` is not on PATH)
+## Step 0a — Install & keep current (activation step)
+
+On **first activation** (or whenever preflight returns `63`/`127`):
 
 ```bash
+# Only if `gwcli` itself is missing from PATH:
 npm install -g github:dewdad/google-multiworkspace-cli
-gwcli setup    # installs gws, creates config dirs, verifies versions
+
+# Install/repair config dirs AND pull the LATEST `gws` binary (default behavior).
+# Run this as part of skill activation so `gws` never drifts behind the docs.
+gwcli setup               # idempotent; installs latest gws. Add --json for machine output.
+# Pin a specific version if ever needed: gwcli setup --gws-version <version>
 ```
 
-`gwcli setup` is idempotent — safe to re-run. Add `--json` for machine-readable output.
+`gwcli setup` is idempotent — safe to re-run. It installs the **latest** `gws`
+release by default (pin with `--gws-version <version>`); run it on activation
+and any time preflight flags `gws` as outdated (exit `63`) so the binary stays
+current with these docs. Confirm with `gwcli doctor`, which prints both `gwcli`
+and `gws` versions.
+
+> **Version hygiene.** The reference examples are written against **gws 0.22.x**.
+> If a command errors with `unexpected argument` for a documented flag, first
+> run `gwcli setup` (installs latest) and re-check `<command> --help` — the flag surface
+> is the source of truth. (Body = `--json`; there is no `--body`/`--fields`
+> flag; field masks live inside `--params`.)
 
 > `gwcli` is distributed via GitHub (npm clones + builds on install — requires git on PATH). It is not currently published to the npm registry.
 
@@ -85,21 +136,29 @@ gwcli profiles add <name> --client <path-to-client-secret.json> --scopes gmail,c
 
 ## Command Router
 
-All commands follow: `gwcli [--profile <name>] <service> <resource> <action> --params '<json>'`
+All commands follow: `gwcli [--profile <name>] <service> <resource> <action> --params '<json>' [--json '<request-body>'] [--upload <path> --upload-content-type <mime>]`
+
+> **Flag surface (gws 0.22.x — verified via `--help`).** Query/URL params →
+> **`--params`**. Request **body** → **`--json`** (there is NO `--body` flag).
+> **Field masks** go **inside** `--params` as a `"fields"` key (there is NO
+> `--fields` flag). Binary content (attachments/uploads) → **`--upload`** +
+> `--upload-content-type`; note `--upload` accepts only a **relative path inside
+> the current working directory** (cd first). If a documented flag errors with
+> `unexpected argument`, run `gwcli setup` to update `gws` and check `--help`.
 
 ### Gmail
 ```bash
 gwcli gmail users messages list --params '{"userId":"me","maxResults":20}'
 gwcli gmail users messages get --params '{"userId":"me","id":"<msg-id>"}'
-gwcli gmail users messages send --params '{"userId":"me"}' --body '{"raw":"<base64>"}'
-gwcli gmail users drafts create --params '{"userId":"me"}' --body '<json>'
+gwcli gmail users messages send --params '{"userId":"me"}' --json '{"raw":"<base64>"}'
+gwcli gmail users drafts create --params '{"userId":"me"}' --json '<request-body>'
 ```
 → Full reference: `@references/gmail.md`
 
 ### Calendar
 ```bash
 gwcli calendar events list --params '{"calendarId":"primary","timeMin":"<ISO>","timeMax":"<ISO>"}'
-gwcli calendar events insert --params '{"calendarId":"primary"}' --body '<event-json>'
+gwcli calendar events insert --params '{"calendarId":"primary"}' --json '<event-json>'
 gwcli agenda --days 7                                    # native shortcut: events for next N days
 gwcli --profile work agenda --days 1                     # today's work events
 ```
@@ -114,10 +173,14 @@ gwcli drive files export --params '{"fileId":"<id>","mimeType":"text/plain"}'
 → Full reference: `@references/drive.md`
 
 ### Keep
+> **Keep requires a Google Workspace identity.** On a personal `@gmail.com`
+> account the Keep API is gated and returns 403; `gwcli` auto-drops the `keep`
+> scope at auth time for such accounts. Treat Keep as available only for
+> Workspace (managed-domain) profiles.
 ```bash
 gwcli keep notes list --params '{"pageSize":25}'
 gwcli keep notes get --params '{"name":"notes/<note-id>"}'
-gwcli keep notes create --body '{"title":"Note Title","body":{"text":{"text":"Content"}}}'
+gwcli keep notes create --json '{"title":"Note Title","body":{"text":{"text":"Content"}}}'
 gwcli keep notes delete --params '{"name":"notes/<note-id>"}'
 ```
 → Full reference: `@references/keep.md`
@@ -126,8 +189,8 @@ gwcli keep notes delete --params '{"name":"notes/<note-id>"}'
 ```bash
 gwcli tasks tasklists list --params '{"maxResults":20}'
 gwcli tasks tasks list --params '{"tasklist":"@default","showCompleted":false}'
-gwcli tasks tasks insert --params '{"tasklist":"@default"}' --body '{"title":"New task","due":"<ISO>"}'
-gwcli tasks tasks patch --params '{"tasklist":"<id>","task":"<id>"}' --body '{"status":"completed"}'
+gwcli tasks tasks insert --params '{"tasklist":"@default"}' --json '{"title":"New task","due":"<ISO>"}'
+gwcli tasks tasks patch --params '{"tasklist":"<id>","task":"<id>"}' --json '{"status":"completed"}'
 ```
 → Full reference: `@references/tasks.md`
 
