@@ -65,6 +65,16 @@ This file is the `--client <path>` argument to `gwcli profiles add`.
    - Scopes: leave the default; gws will request the scopes it needs at
      auth-login time. Adding scopes here is for the consent screen UX only.
 
+   > **⚠ Testing-mode ~25-scope cap.** While the app is **unverified** (consent
+   > screen in "Testing"), Google limits consent to **~25 OAuth scopes**. Each
+   > `gwcli` service maps to several scopes, so the default profile set is
+   > already near the ceiling and `gwcli profiles add ... --full` (all scopes
+   > incl. Pub/Sub + Cloud Platform) will typically **exceed it and fail
+   > consent** — most visibly on personal `@gmail.com` accounts. To grant broad
+   > or full access, either narrow with `--scopes`, **verify** the OAuth app, or
+   > use an **Internal** Workspace app (exempt from the cap). Also enable each
+   > service's API in the project first, or its scopes fail regardless.
+
 4. **Create credentials → OAuth client ID:**
    - Application type: **Desktop app** (this is what `gws` expects — Web
      application or Android won't work).

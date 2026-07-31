@@ -1,15 +1,17 @@
 ---
 name: google-workspace
 description: |
-  Google Workspace access for AI agents — Gmail, Calendar, Drive, Docs, Sheets, Keep, Tasks.
-  Multi-account profiles (personal, work, client-X). Auto-installs dependencies.
+  Google Workspace access for AI agents — Gmail, Calendar, Drive, Docs, Sheets,
+  Slides, Tasks, Keep, People/Contacts, Chat, Meet, Forms (plus opt-in Classroom
+  & Admin Reports). Multi-account profiles (personal, work, client-X). Auto-installs dependencies.
 
   Use when: reading/sending email, managing calendar events, searching Drive,
-  accessing Google Docs/Sheets, or any Google Workspace task for a specific user account.
+  accessing Google Docs/Sheets/Slides, contacts, Chat, Meet, or Forms, or any
+  Google Workspace task for a specific user account.
 argument-hint: "[service] [action] [--profile name] [--format json]"
 metadata:
-  version: "2.3.0"
-  tags: "google, workspace, gmail, calendar, drive, docs, sheets, keep, tasks, multi-account"
+  version: "2.4.0"
+  tags: "google, workspace, gmail, calendar, drive, docs, sheets, slides, keep, tasks, people, contacts, chat, meet, forms, classroom, admin-reports, multi-account"
   requires-bins: "node, gwcli"
   homepage: "https://github.com/dewdad/multi-gws-cli"
   license: "MIT"
@@ -118,19 +120,27 @@ gwcli profiles list --format json
 If no profiles or user requests a new account:
 
 1. **Ask the user** for: account nickname (e.g. `work`, `personal`) and which services they need
-2. The user must provide an OAuth client secret JSON from Google Cloud Console — see `@references/oauth-bootstrap.md` (Google deprecated post-creation secret retrieval; one-shot capture).
-3. Run (omit `--scopes` to grant all supported services):
+2. A custom OAuth client secret JSON is **optional** — `gwcli` ships a built-in Desktop client, so `profiles add` works with no `--client`. Provide `--client <path>` only to use your own / verified OAuth app — see `@references/oauth-bootstrap.md` (Google deprecated post-creation secret retrieval; one-shot capture).
+3. Run (omit `--scopes` to grant the default mainstream Workspace services; omit `--client` to use the built-in client):
 ```bash
-# All services (recommended for general agents)
+# Default services (gmail, calendar, drive, docs, sheets, slides, tasks, keep, people, chat, meet, forms), built-in client
+gwcli profiles add <name>
+
+# Default services with your own OAuth client
 gwcli profiles add <name> --client <path-to-client-secret.json>
 
-# Or restrict scopes — pick from: gmail, calendar, drive, docs, sheets, keep, tasks
-gwcli profiles add <name> --client <path-to-client-secret.json> --scopes gmail,calendar,drive,docs,sheets,keep,tasks
+# Restrict scopes — pick from the default set above, plus opt-in extras: classroom, admin-reports
+gwcli profiles add <name> --scopes gmail,calendar,drive
+
+# Grant ABSOLUTELY EVERYTHING (all scopes incl. Pub/Sub + Cloud Platform)
+gwcli profiles add <name> --full
 ```
 4. This opens a browser — the user authenticates. Tokens are stored locally.
 5. Set default if first profile: `gwcli profiles set-default <name>`
 
-> **Scopes are immutable on a profile.** To add a scope later, you must `profiles remove` then `profiles add` with the new scope set. `profiles auth` re-uses the existing scope set.
+> **⚠ Testing-mode scope limit.** An unverified OAuth app (consent screen in "Testing") is capped by Google at **~25 OAuth scopes**. Each service maps to several scopes, so the default set already sits near the ceiling and `--full` will almost always exceed it — consent then fails, most visibly on personal `@gmail.com` accounts. Fixes: narrow with `--scopes`, or get the OAuth app verified. See `@references/profiles.md`.
+
+> **Scopes are immutable on a profile.** To add a scope later, you must `profiles remove` then `profiles add` with the new scope set (or `--full`). `profiles auth` re-uses the existing scope set (including a stored `--full` grant).
 
 **Profile selection priority:** `--profile` flag > `GWCLI_PROFILE` env > configured default.
 
@@ -194,14 +204,35 @@ gwcli tasks tasks patch --params '{"tasklist":"<id>","task":"<id>"}' --json '{"s
 ```
 → Full reference: `@references/tasks.md`
 
+### Docs & Sheets & Slides
+```bash
+gwcli docs documents get --params '{"documentId":"<id>"}'
+gwcli sheets spreadsheets get --params '{"spreadsheetId":"<id>"}'
+gwcli sheets spreadsheets values get --params '{"spreadsheetId":"<id>","range":"Sheet1!A1:C10"}'
+gwcli slides presentations get --params '{"presentationId":"<id>"}'
+```
+→ Docs/Sheets share the router pattern in `@references/drive.md`; Slides mirrors it.
+
+### People / Contacts, Chat, Meet, Forms
+```bash
+gwcli people people connections list --params '{"resourceName":"people/me","personFields":"names,emailAddresses"}'
+gwcli chat spaces list --params '{}'
+gwcli chat spaces messages create --params '{"parent":"spaces/<id>"}' --body '{"text":"Hello"}'
+gwcli meet spaces get --params '{"name":"spaces/<id>"}'
+gwcli forms forms get --params '{"formId":"<id>"}'
+```
+> These follow the same `gwcli <service> <resource> <action>` passthrough. Argument shapes come from `gws` — run `gwcli <service> --help` or see the [`gws` docs](https://github.com/googleworkspace/cli). `classroom` and `admin-reports` are also available but require `--scopes classroom` / `--scopes admin-reports` at profile-add time (not in the default set).
+
 ### Profile Management
 ```bash
 gwcli profiles list --format json
-gwcli profiles add <name> --client <path>                                # all 7 services
+gwcli profiles add <name> --client <path>                                # default mainstream services (12)
 gwcli profiles add <name> --client <path> --scopes gmail,calendar,drive  # restricted
+gwcli profiles add <name> --client <path> --full                         # ALL scopes (incl. Pub/Sub + Cloud Platform)
 gwcli profiles remove <name> --force      # --force is REQUIRED (non-interactive)
 gwcli profiles set-default <name>
-gwcli profiles auth <name>                # re-authenticate (re-uses existing scopes)
+gwcli profiles auth <name>                # re-authenticate (re-uses existing scopes; --full re-uses full grant)
+gwcli profiles auth <name> --full         # re-authenticate requesting ALL scopes
 gwcli profiles status --format json --strict   # exits 2 if ANY profile unauthenticated
 gwcli doctor                              # full health check
 gwcli migrate --client <path>             # migrate v1 profiles to v2 layout

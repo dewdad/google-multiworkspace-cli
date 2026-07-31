@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { addProfile, removeProfile, listAllProfiles, renameProfile, setDefaultProfile, refreshProfileEmail } from '../profiles/index.js';
 import { getProfileMeta } from '../profiles/config.js';
+import { DEFAULT_SERVICES, FULL_ACCESS_SENTINEL, isFullAccess } from '../profiles/scopes.js';
 import { runGwsAuthLogin, runGwsAuthStatus } from '../gws/runner.js';
 import { findGwsBinary } from '../gws/binary.js';
 import { formatOutput } from '../lib/output.js';
@@ -57,7 +58,8 @@ export function registerProfilesCommands(program: Command): void {
     .command('add <name>')
     .description('Add a new profile')
     .option('--client <path>', 'Path to a custom OAuth client credentials JSON file (optional — uses the built-in gwcli client if omitted)')
-    .option('--scopes <list>', 'Comma-separated service names for scope picker', 'gmail,calendar,drive,docs,sheets,keep,tasks')
+    .option('--scopes <list>', 'Comma-separated service names for scope picker', DEFAULT_SERVICES.join(','))
+    .option('--full', 'Request ALL scopes (incl. Pub/Sub + Cloud Platform) via `gws auth login --full`. Overrides --scopes. WARNING: exceeds Google\'s ~25-scope limit for unverified/testing-mode OAuth apps and will fail consent there.')
     .option('--display-name <name>', 'Human-friendly display name')
     .option('--no-auth', 'Skip authentication after creating profile')
     .option('--no-incognito', 'Open OAuth URL in default browser session instead of a private/incognito window')
@@ -67,7 +69,13 @@ export function registerProfilesCommands(program: Command): void {
         // Verify gws is available
         findGwsBinary();
 
-        const scopes = options.scopes.split(',').map((s: string) => s.trim());
+        // --full requests every scope and takes precedence over --scopes. We
+        // persist the sentinel (not a real service list) so `profiles auth`
+        // re-requests full access on re-authentication.
+        const fullAccess = options.full === true;
+        const scopes = fullAccess
+          ? [FULL_ACCESS_SENTINEL]
+          : options.scopes.split(',').map((s: string) => s.trim()).filter(Boolean);
         addProfile(name, {
           clientSecretPath: options.client,
           displayName: options.displayName,
@@ -75,6 +83,9 @@ export function registerProfilesCommands(program: Command): void {
         });
 
         console.log(`Profile '${name}' created.`);
+        if (fullAccess) {
+          console.log('Full-access mode: requesting ALL scopes (incl. Pub/Sub + Cloud Platform).');
+        }
 
         if (options.auth !== false) {
           console.log('Starting authentication...');
@@ -84,6 +95,7 @@ export function registerProfilesCommands(program: Command): void {
           const result = await runGwsAuthLogin(name, scopes, {
             incognito: options.incognito as boolean,
             autoOpen: options.open as boolean,
+            fullAccess,
           });
           if (result.exitCode === 0) {
             console.log(`Profile '${name}' authenticated successfully.`);
@@ -197,11 +209,15 @@ export function registerProfilesCommands(program: Command): void {
     .command('auth <name>')
     .description('(Re-)authenticate a profile')
     .option('--scopes <list>', 'Comma-separated service names (defaults to the profile\'s stored scopes)')
+    .option('--full', 'Re-authenticate requesting ALL scopes (incl. Pub/Sub + Cloud Platform) via `gws auth login --full`. Overrides --scopes and stored scopes.')
     .option('--no-incognito', 'Open OAuth URL in default browser session instead of a private/incognito window')
     .option('--no-open', 'Do not auto-launch a browser for the OAuth URL (headless/agent/CI); print it instead')
     .action(async (name: string, options) => {
       try {
         findGwsBinary();
+
+        // Explicit --full flag forces a full-access re-auth.
+        let fullAccess = options.full === true;
 
         // Resolve scopes: explicit --scopes wins, else fall back to the
         // profile's stored scopes. This bypasses the gws interactive scope
@@ -218,10 +234,17 @@ export function registerProfilesCommands(program: Command): void {
           }
         }
 
+        // A profile created with --full stores the full-access sentinel; honor
+        // it on re-auth so `profiles auth <name>` reuses the original grant.
+        if (isFullAccess(scopes)) {
+          fullAccess = true;
+        }
+
         // Non-TTY guard: if we still have no scopes AND stdin isn't a TTY,
         // gws will render an interactive picker and hang forever. Refuse early
         // with a clear remediation hint instead of silently deadlocking.
-        if ((!scopes || scopes.length === 0) && !process.stdin.isTTY) {
+        // Full-access mode needs no scope list, so it is exempt.
+        if (!fullAccess && (!scopes || scopes.length === 0) && !process.stdin.isTTY) {
           throw new GwcliError(
             `Cannot authenticate profile '${name}' in a non-interactive environment without explicit scopes.`,
             'AUTH_NEEDS_SCOPES_NON_TTY',
@@ -230,12 +253,15 @@ export function registerProfilesCommands(program: Command): void {
         }
 
         console.log(`Authenticating profile '${name}'...`);
-        if (scopes && scopes.length > 0) {
+        if (fullAccess) {
+          console.log('Full-access mode: requesting ALL scopes (incl. Pub/Sub + Cloud Platform).');
+        } else if (scopes && scopes.length > 0) {
           console.log(`Using scopes: ${scopes.join(', ')}`);
         }
         const result = await runGwsAuthLogin(name, scopes, {
           incognito: options.incognito as boolean,
           autoOpen: options.open as boolean,
+          fullAccess,
         });
         if (result.exitCode === 0) {
           console.log(`Profile '${name}' authenticated successfully.`);

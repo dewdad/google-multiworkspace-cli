@@ -164,6 +164,16 @@ export interface RunGwsAuthLoginOptions {
    * caller can route it into its own browser.
    */
   autoOpen?: boolean;
+  /**
+   * Request the full scope set via `gws auth login --full` (ALL scopes,
+   * including Pub/Sub + Cloud Platform) instead of a per-service `--services`
+   * filter. When true, `services` is ignored.
+   *
+   * ⚠ This will exceed Google's ~25-scope limit for unverified (testing-mode)
+   * OAuth apps and fail consent — intended for verified apps / Workspace
+   * accounts. See `skill/references/profiles.md`.
+   */
+  fullAccess?: boolean;
 }
 
 /**
@@ -187,7 +197,10 @@ export function runGwsAuthLogin(
     options.openBrowser ?? ((url: string) => openInBrowser(url, { incognito }));
 
   const args = ['auth', 'login'];
-  if (services && services.length > 0) {
+  if (options.fullAccess) {
+    // --full requests every scope; it is mutually exclusive with --services.
+    args.push('--full');
+  } else if (services && services.length > 0) {
     args.push('--services', services.join(','));
   }
 

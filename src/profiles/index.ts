@@ -13,10 +13,7 @@ import {
   profileExists,
 } from './config.js';
 import { GwcliError, type ProfileMeta } from '../types/index.js';
-
-// ─── Default Scopes (service names for gws --services flag) ──────────────────
-
-const DEFAULT_SERVICES = ['gmail', 'calendar', 'drive', 'docs', 'sheets', 'keep', 'tasks'];
+import { DEFAULT_SERVICES } from './scopes.js';
 
 // ─── Profile Add ─────────────────────────────────────────────────────────────
 
@@ -72,7 +69,7 @@ export function addProfile(name: string, options: AddProfileOptions): ProfileMet
     email: null,
     createdAt: new Date().toISOString(),
     lastUsed: null,
-    scopes: options.scopes ?? DEFAULT_SERVICES,
+    scopes: options.scopes ?? [...DEFAULT_SERVICES],
     clientSecretSource,
     tags: [],
   };

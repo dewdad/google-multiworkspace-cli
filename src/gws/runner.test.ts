@@ -413,6 +413,25 @@ describe('runGwsAuthLogin', () => {
     }
   });
 
+  it('passes --full (not --services) when fullAccess is set', async () => {
+    const mockSpawn = vi.mocked(spawn);
+    const fake = makeFakeChild();
+    mockSpawn.mockReturnValue(fake.child as never);
+
+    // Even with a services list present, fullAccess must take precedence.
+    const promise = runGwsAuthLogin('work', ['gmail', 'drive'], {
+      openBrowser: vi.fn(),
+      fullAccess: true,
+    });
+    fake.close(0);
+    await promise;
+
+    const callArgs = mockSpawn.mock.calls[0]!;
+    const args = callArgs[1] as string[];
+    expect(args).toEqual(expect.arrayContaining(['auth', 'login', '--full']));
+    expect(args).not.toContain('--services');
+  });
+
   it('resolves with exitCode 1 when spawn emits an error event', async () => {
     const mockSpawn = vi.mocked(spawn);
     const fake = makeFakeChild();

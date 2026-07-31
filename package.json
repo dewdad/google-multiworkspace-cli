@@ -1,6 +1,6 @@
 {
-  "name": "google-workspace-cli",
-  "version": "2.1.0",
+  "name": "multi-gws-cli",
+  "version": "2.4.0",
   "description": "Multi-profile Google Workspace CLI — orchestration layer over gws. Installable as AI skill via skillshare.",
   "type": "module",
   "main": "dist/index.js",
@@ -34,6 +34,13 @@
     "keep",
     "docs",
     "sheets",
+    "slides",
+    "tasks",
+    "people",
+    "contacts",
+    "chat",
+    "meet",
+    "forms",
     "ai-skill",
     "skillshare",
     "llm-agent",
@@ -65,6 +72,6 @@
   "skillshare": {
     "skill-dir": "skill",
     "name": "google-workspace",
-    "description": "Google Workspace access for AI agents — Gmail, Calendar, Drive, Docs, Sheets, Keep, Tasks."
+    "description": "Google Workspace access for AI agents — Gmail, Calendar, Drive, Docs, Sheets, Slides, Tasks, Keep, People/Contacts, Chat, Meet, Forms."
   }
 }

@@ -4,8 +4,7 @@ import { getProfileDir, getProfileGwsDir, getProfileMeta, saveProfileMeta, PROFI
 import { runGwsAuthLogin } from '../gws/runner.js';
 import { findGwsBinary } from '../gws/binary.js';
 import { GwcliError, type ProfileMeta } from '../types/index.js';
-
-const DEFAULT_SERVICES = ['gmail', 'calendar', 'drive', 'docs', 'sheets', 'keep', 'tasks'];
+import { DEFAULT_SERVICES } from '../profiles/scopes.js';
 
 interface MigrateOptions {
   client?: string;
@@ -100,7 +99,7 @@ async function migrateProfile(name: string, options: MigrateOptions): Promise<vo
     email: existingMeta?.email ?? null,
     createdAt: existingMeta?.createdAt ?? new Date().toISOString(),
     lastUsed: existingMeta?.lastUsed ?? null,
-    scopes: existingMeta?.scopes ?? DEFAULT_SERVICES,
+    scopes: existingMeta?.scopes ?? [...DEFAULT_SERVICES],
     clientSecretSource: options.client ? resolve(options.client) : 'unknown (migrated)',
     tags: ['migrated'],
   };

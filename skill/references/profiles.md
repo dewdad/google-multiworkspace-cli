@@ -79,15 +79,39 @@ Returns:
 
 ### Add a New Profile
 ```bash
-gwcli profiles add <name> --client <path-to-oauth-json> [--scopes gmail,calendar,drive,docs,sheets,keep,tasks] [--display-name "My Work"]
+gwcli profiles add <name> --client <path-to-oauth-json> [--scopes <list> | --full] [--display-name "My Work"]
 ```
 
 **Required**: OAuth client secret JSON from Google Cloud Console — see [`oauth-bootstrap.md`](oauth-bootstrap.md). Google's "Download JSON" modal is one-shot; capture the file in a real browser, not headless automation.
 
 If the OAuth flow fails (timeout, browser closed, consent declined), `profiles add` rolls back automatically — the partial profile directory is removed so you can retry with the same name.
 
-**Available scopes**: `gmail`, `calendar`, `drive`, `docs`, `sheets`, `keep`, `tasks`  
-Default: `gmail,calendar,drive,docs,sheets,keep,tasks`
+**Default scopes** (granted when `--scopes` is omitted) — mainstream Workspace user services:
+`gmail,calendar,drive,docs,sheets,slides,tasks,keep,people,chat,meet,forms`
+
+**Opt-in extras** (available via `--scopes`, NOT in the default): `classroom`, `admin-reports` — education- / admin-only, and each pulls in scopes a typical account can't consent to.
+
+**Full access** — `--full` requests EVERY scope (incl. Pub/Sub + Cloud Platform) via `gws auth login --full`. It overrides `--scopes`. The grant is stored so `profiles auth` re-requests it on re-auth.
+
+```bash
+# All mainstream services (default)
+gwcli profiles add personal --client ~/client.json
+
+# Restricted set
+gwcli profiles add work --client ~/client.json --scopes gmail,calendar,drive
+
+# Include an opt-in extra
+gwcli profiles add edu --client ~/client.json --scopes gmail,drive,classroom
+
+# Everything
+gwcli profiles add admin --client ~/client.json --full
+```
+
+> **⚠ Testing-mode scope limit.** Google caps consent for an **unverified** OAuth app (consent screen in "Testing") at **~25 OAuth scopes**. Each service maps to several scopes, so:
+> - the default set already sits near the ceiling;
+> - adding `classroom`/`admin-reports` or using `--full` will typically **exceed 25 and fail consent** — most visibly on personal `@gmail.com` accounts.
+>
+> Remedies: narrow the request with `--scopes`, or get the OAuth app **verified** (or use an Internal Workspace app, which is exempt).
 
 After creating, the CLI opens a browser for OAuth consent. The user must authenticate.
 
@@ -111,10 +135,11 @@ gwcli profiles set-default <name>
 ```bash
 gwcli profiles auth <name>                       # uses the profile's stored scopes
 gwcli profiles auth <name> --scopes gmail,calendar  # override (still subject to immutability rule below)
+gwcli profiles auth <name> --full                # re-authenticate requesting ALL scopes
 ```
 Opens browser for fresh OAuth flow. Use when tokens expire.
 
-> **`profiles auth` reuses the existing scope set.** It does **not** prompt for new scopes. To add a scope, you must `profiles remove --force` then `profiles add` with the new scope list.
+> **`profiles auth` reuses the existing scope set.** It does **not** prompt for new scopes. A profile created with `--full` stores a full-access sentinel and is automatically re-authenticated with `--full`. To change the scope set, you must `profiles remove --force` then `profiles add` with the new scope list (or `--full`).
 
 > **Non-TTY behavior.** `profiles auth` always passes `--services` to the underlying gws so the interactive scope picker is bypassed. In CI / agent / `Start-Process`-style environments where stdin is not a TTY, the command refuses to run if no stored or `--scopes` value is available — it would otherwise hang forever waiting for keystrokes that never arrive.
 
@@ -187,8 +212,10 @@ The global config file (`~/.config/gwcli/config.json` on Linux/Mac, `%APPDATA%\g
 
 1. Go to https://console.cloud.google.com/
 2. Create project or select existing
-3. Enable APIs you need (only enable what you'll use):
-   - Gmail API, Google Calendar API, Google Drive API, Google Docs API, Google Sheets API, Google Tasks API
+3. Enable APIs you need (**each service's API must be enabled in the project, or its scopes fail consent**):
+   - Default set: Gmail API, Google Calendar API, Google Drive API, Google Docs API, Google Sheets API, Google Slides API, Google Tasks API, People API (Contacts), Google Chat API, Google Meet API, Google Forms API
+   - Opt-in extras: Google Classroom API, Admin SDK / Reports API (`admin-reports`)
+   - `--full` additionally requires Cloud Pub/Sub API + `cloud-platform` scope — only enable if you actually use full access.
    - **Google Keep API** is **enterprise/Workspace-only** and requires special enablement (the consumer Keep API is not exposed). See [`keep.md`](./keep.md) for details.
 4. Go to **APIs & Services > Credentials**
 5. Click **Create Credentials > OAuth client ID**

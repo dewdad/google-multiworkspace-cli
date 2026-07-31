@@ -5,4 +5,4 @@
  * The build script enforces this via `npm version` (which updates package.json),
  * after which this file must be hand-bumped.
  */
-export const GWCLI_VERSION = '2.1.0';
+export const GWCLI_VERSION = '2.4.0';
