@@ -1,5 +1,6 @@
 import { GwcliError, type ResolvedProfile } from '../types/index.js';
 import { getGlobalConfig, getProfileGwsDir, getProfileMeta, profileExists, hasAuthArtifacts } from './config.js';
+import { validateProfileName } from './validator.js';
 
 /**
  * Resolve the active profile from multiple sources in priority order:
@@ -19,18 +20,21 @@ export function resolveProfile(flagProfile?: string): ResolvedProfile {
 export function resolveProfileName(flagProfile?: string): string {
   // Priority 1: explicit flag
   if (flagProfile) {
+    validateProfileName(flagProfile);
     return flagProfile;
   }
 
   // Priority 2: environment variable
   const envProfile = process.env['GWCLI_PROFILE'];
   if (envProfile) {
+    validateProfileName(envProfile);
     return envProfile;
   }
 
   // Priority 3: config default
   const config = getGlobalConfig();
   if (config.defaultProfile) {
+    validateProfileName(config.defaultProfile);
     return config.defaultProfile;
   }
 

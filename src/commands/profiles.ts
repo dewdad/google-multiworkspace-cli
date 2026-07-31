@@ -325,11 +325,7 @@ export function registerProfilesCommands(program: Command): void {
               lastUsed: entry.lastUsed,
               ...(status ? { details: status } : {}),
             };
-            if (wantJson) {
-              console.log(JSON.stringify(unified, null, 2));
-            } else {
-              console.log(JSON.stringify(unified, null, 2));
-            }
+            console.log(JSON.stringify(unified, null, 2));
           } else if (status) {
             // Profile dir is gone but gws still has state — surface raw gws output.
             console.log(JSON.stringify({ name, details: status }, null, 2));

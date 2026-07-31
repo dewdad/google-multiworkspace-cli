@@ -5,7 +5,7 @@ import { join } from 'path';
 const TEST_CONFIG_DIR = join(process.env['TEMP'] ?? '/tmp', 'gwcli-addprofile-test-' + Date.now());
 process.env['GWCLI_CONFIG_DIR'] = TEST_CONFIG_DIR;
 
-const { addProfile } = await import('./index.js');
+const { addProfile, removeProfile, renameProfile } = await import('./index.js');
 const { getProfileGwsDir, getProfileMeta } = await import('./config.js');
 
 const VALID_CLIENT = join(TEST_CONFIG_DIR, 'client_secret.json');
@@ -50,5 +50,88 @@ describe('addProfile client-secret handling', () => {
     } catch (err) {
       expect((err as { code?: string }).code).toBe('CLIENT_SECRET_NOT_FOUND');
     }
+  });
+});
+
+describe('removeProfile — name validation', () => {
+  beforeEach(() => {
+    mkdirSync(join(TEST_CONFIG_DIR, 'profiles'), { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(TEST_CONFIG_DIR, { recursive: true, force: true });
+  });
+
+  it('throws GwcliError for a traversal name and does not touch the filesystem', () => {
+    // Given: clean profiles dir
+    const profilesDir = join(TEST_CONFIG_DIR, 'profiles');
+
+    // When: traversal name is passed
+    let thrownErr: unknown;
+    try {
+      removeProfile('../evil');
+    } catch (err) {
+      thrownErr = err;
+    }
+
+    // Then: a GwcliError was thrown
+    expect(thrownErr).toBeDefined();
+    expect((thrownErr as { code?: string }).code).toBeDefined();
+
+    // And: no directory escaped the profiles dir
+    expect(existsSync(join(profilesDir, '..', 'evil'))).toBe(false);
+    expect(existsSync(join(TEST_CONFIG_DIR, 'evil'))).toBe(false);
+  });
+});
+
+describe('renameProfile — name validation', () => {
+  beforeEach(() => {
+    mkdirSync(join(TEST_CONFIG_DIR, 'profiles'), { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(TEST_CONFIG_DIR, { recursive: true, force: true });
+  });
+
+  it('throws GwcliError for a traversal oldName and does not touch the filesystem', () => {
+    // Given: clean profiles dir
+    const profilesDir = join(TEST_CONFIG_DIR, 'profiles');
+
+    // When: traversal oldName is passed
+    let thrownErr: unknown;
+    try {
+      renameProfile('../evil', 'ok');
+    } catch (err) {
+      thrownErr = err;
+    }
+
+    // Then: a GwcliError was thrown
+    expect(thrownErr).toBeDefined();
+    expect((thrownErr as { code?: string }).code).toBeDefined();
+
+    // And: no directory was created or mutated outside profiles dir
+    expect(existsSync(join(TEST_CONFIG_DIR, 'evil'))).toBe(false);
+    expect(existsSync(join(profilesDir, 'ok'))).toBe(false);
+  });
+
+  it('throws GwcliError for a traversal newName and does not touch the filesystem', () => {
+    // Given: clean profiles dir
+    const profilesDir = join(TEST_CONFIG_DIR, 'profiles');
+
+    // When: traversal newName is passed
+    let thrownErr: unknown;
+    try {
+      renameProfile('ok', '../evil');
+    } catch (err) {
+      thrownErr = err;
+    }
+
+    // Then: a GwcliError was thrown
+    expect(thrownErr).toBeDefined();
+    expect((thrownErr as { code?: string }).code).toBeDefined();
+
+    // And: no directory escaped the profiles dir
+    expect(existsSync(join(TEST_CONFIG_DIR, 'evil'))).toBe(false);
+    expect(existsSync(join(profilesDir, 'ok'))).toBe(false);
   });
 });

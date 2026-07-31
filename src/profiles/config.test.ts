@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdirSync, rmSync } from 'fs';
+import { mkdirSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
+import { GwcliError } from '../types/index.js';
 
 // Set GWCLI_CONFIG_DIR before importing config module
 const TEST_CONFIG_DIR = join(process.env['TEMP'] ?? '/tmp', 'gwcli-test-' + Date.now());
@@ -34,11 +35,41 @@ describe('config module', () => {
       const loaded = getGlobalConfig();
       expect(loaded.defaultProfile).toBe('work');
     });
+
+    it('throws GwcliError on malformed config.json', () => {
+      ensureConfigDir();
+      writeFileSync(join(TEST_CONFIG_DIR, 'config.json'), '{ not valid json }');
+      expect(() => getGlobalConfig()).toThrow(GwcliError);
+    });
+
+    it('deep-merges partial settings preserving unspecified defaults', () => {
+      ensureConfigDir();
+      writeFileSync(
+        join(TEST_CONFIG_DIR, 'config.json'),
+        JSON.stringify({
+          version: 1,
+          defaultProfile: null,
+          gwsBinary: 'gws',
+          settings: { defaultFormat: 'yaml' },
+        })
+      );
+      const config = getGlobalConfig();
+      expect(config.settings.defaultFormat).toBe('yaml');
+      expect(config.settings.annotateProfile).toBe(false);
+    });
   });
 
   describe('profile metadata', () => {
     it('returns null for non-existent profile', () => {
       expect(getProfileMeta('nonexistent')).toBeNull();
+    });
+
+    it('throws GwcliError on malformed meta.json', () => {
+      ensureConfigDir();
+      const profileDir = join(TEST_CONFIG_DIR, 'profiles', 'broken');
+      mkdirSync(profileDir, { recursive: true });
+      writeFileSync(join(profileDir, 'meta.json'), '{ not valid json }');
+      expect(() => getProfileMeta('broken')).toThrow(GwcliError);
     });
 
     it('saves and loads profile metadata', () => {

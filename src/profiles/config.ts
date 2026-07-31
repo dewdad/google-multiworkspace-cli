@@ -1,7 +1,7 @@
 import { homedir, platform } from 'os';
 import { join } from 'path';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from 'fs';
-import type { GlobalConfig, ProfileMeta } from '../types/index.js';
+import { GwcliError, type GlobalConfig, type ProfileMeta } from '../types/index.js';
 
 // ─── Path Resolution ─────────────────────────────────────────────────────────
 
@@ -61,8 +61,24 @@ export function getGlobalConfig(): GlobalConfig {
     writeFileSync(CONFIG_FILE, JSON.stringify(DEFAULT_GLOBAL_CONFIG, null, 2));
     return { ...DEFAULT_GLOBAL_CONFIG };
   }
-  const raw = JSON.parse(readFileSync(CONFIG_FILE, 'utf-8'));
-  return { ...DEFAULT_GLOBAL_CONFIG, ...raw };
+  let raw: ReturnType<typeof JSON.parse>;
+  try {
+    raw = JSON.parse(readFileSync(CONFIG_FILE, 'utf-8'));
+  } catch {
+    throw new GwcliError(
+      `Failed to parse config file: ${CONFIG_FILE}`,
+      'CONFIG_CORRUPTED',
+      `Delete or repair ${CONFIG_FILE} and re-run the command.`
+    );
+  }
+  return {
+    ...DEFAULT_GLOBAL_CONFIG,
+    ...raw,
+    settings: {
+      ...DEFAULT_GLOBAL_CONFIG.settings,
+      ...(raw.settings ?? {}),
+    },
+  };
 }
 
 export function saveGlobalConfig(config: GlobalConfig): void {
@@ -77,7 +93,15 @@ export function getProfileMeta(profileName: string): ProfileMeta | null {
   if (!existsSync(metaPath)) {
     return null;
   }
-  return JSON.parse(readFileSync(metaPath, 'utf-8'));
+  try {
+    return JSON.parse(readFileSync(metaPath, 'utf-8'));
+  } catch {
+    throw new GwcliError(
+      `Failed to parse profile metadata: ${metaPath}`,
+      'PROFILE_META_CORRUPTED',
+      `Delete or repair ${metaPath} and re-authenticate: gwcli profiles auth ${profileName}`
+    );
+  }
 }
 
 export function saveProfileMeta(profileName: string, meta: ProfileMeta): void {

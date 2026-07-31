@@ -12,6 +12,11 @@ interface Translation {
   translate: (args: string[]) => string[];
   /** Deprecation message */
   newSyntax: string;
+  /**
+   * True when the v1 command takes a positional argument at position 3+.
+   * Suppresses the native-gws-method pass-through guard for this entry.
+   */
+  takesPositionalArg?: true;
 }
 
 function extractFlag(args: string[], flag: string): string | undefined {
@@ -80,15 +85,17 @@ const TRANSLATIONS: Record<string, Translation> = {
   },
 
   'drive search': {
+    takesPositionalArg: true,
     translate: (args) => {
       const query = args.find(a => !a.startsWith('-')) ?? '';
+      const escaped = query.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
       return [
         'drive', 'files', 'list',
-        '--params', JSON.stringify({ q: `name contains '${query}'`, pageSize: 20 }),
+        '--params', JSON.stringify({ q: `name contains '${escaped}'`, pageSize: 20 }),
         '--fields', 'files(id,name,mimeType,modifiedTime)',
       ];
     },
-    newSyntax: "gwcli drive files list --params '{\"q\":\"name contains 'term'\"}'",
+    newSyntax: "gwcli drive files list --params '{\"q\":\"name contains term\",\"pageSize\":20}'",
   },
 };
 
@@ -111,9 +118,10 @@ export function tryTranslateCompat(gwsArgs: string[]): string[] | null {
   if (!translation) return null;
 
   const third = gwsArgs[2];
-  if (third !== undefined && !third.startsWith('-')) {
+  if (third !== undefined && !third.startsWith('-') && !translation.takesPositionalArg) {
     // User supplied a real third positional (e.g. "list", "get") — this is
     // native gws syntax, not the deprecated v1 alias. Pass through.
+    // Exception: translations that take a positional query arg (e.g. 'drive search').
     return null;
   }
 

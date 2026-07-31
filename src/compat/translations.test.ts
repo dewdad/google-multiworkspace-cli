@@ -57,4 +57,14 @@ describe('tryTranslateCompat', () => {
     // followed by a real third positional.
     expect(tryTranslateCompat(['drive', 'list', 'something'])).toBeNull();
   });
+
+  it('drive search: escapes single quotes in query for Drive query language', () => {
+    const out = tryTranslateCompat(['drive', 'search', "O'Brien"]);
+    expect(out).not.toBeNull();
+    const paramsIdx = out!.indexOf('--params');
+    expect(paramsIdx).toBeGreaterThan(-1);
+    const parsed = JSON.parse(out![paramsIdx + 1]) as { q: string; pageSize: number };
+    expect(parsed.q).toBe("name contains 'O\\'Brien'");
+    expect(stderr).toHaveBeenCalled();
+  });
 });

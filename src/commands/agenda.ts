@@ -26,6 +26,14 @@ export function runAgenda(options: AgendaOptions): never {
     );
   }
 
+  if (!Number.isFinite(options.maxResults) || options.maxResults <= 0) {
+    throw new GwcliError(
+      `Invalid --max value: ${options.maxResults}`,
+      'INVALID_AGENDA_MAX',
+      'Use a positive integer like --max 50'
+    );
+  }
+
   const now = new Date();
   const end = new Date(now.getTime() + options.days * 24 * 60 * 60 * 1000);
 

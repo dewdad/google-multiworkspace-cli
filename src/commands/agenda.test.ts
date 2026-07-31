@@ -58,6 +58,18 @@ describe('runAgenda', () => {
     ).toThrow(GwcliError);
   });
 
+  it('rejects invalid maxResults with INVALID_AGENDA_MAX', () => {
+    expect(() =>
+      runAgenda({ days: 7, calendarId: 'primary', maxResults: NaN })
+    ).toThrow(GwcliError);
+    expect(() =>
+      runAgenda({ days: 7, calendarId: 'primary', maxResults: 0 })
+    ).toThrow(GwcliError);
+    expect(() =>
+      runAgenda({ days: 7, calendarId: 'primary', maxResults: -5 })
+    ).toThrow(/Invalid --max value/);
+  });
+
   it('composes a [now, now+days] time window in UTC ISO format', () => {
     expect(() =>
       runAgenda({ days: 7, calendarId: 'primary', maxResults: 50 })

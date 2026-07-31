@@ -88,6 +88,8 @@ export function addProfile(name: string, options: AddProfileOptions): ProfileMet
 // ─── Profile Remove ──────────────────────────────────────────────────────────
 
 export function removeProfile(name: string): void {
+  validateProfileName(name);
+
   if (!profileExists(name)) {
     throw new GwcliError(
       `Profile '${name}' does not exist.`,
@@ -162,6 +164,7 @@ export function listAllProfiles(options: ListProfilesOptions = {}): ProfileListE
 // ─── Profile Rename ──────────────────────────────────────────────────────────
 
 export function renameProfile(oldName: string, newName: string): void {
+  validateProfileName(oldName);
   validateProfileName(newName);
 
   if (!profileExists(oldName)) {

@@ -189,7 +189,7 @@ function handlePassthrough(rawArgs: string[]): void {
 
     // Inject --format into gws args if specified by gwcli and not already in gws args
     const finalGwsArgs = [...effectiveArgs];
-    if (formatFlag && !effectiveArgs.includes('--format') && !effectiveArgs.includes('-f')) {
+    if (formatFlag && !effectiveArgs.some(a => a === '--format' || a === '-f' || a.startsWith('--format=') || a.startsWith('-f='))) {
       finalGwsArgs.push('--format', formatFlag);
     }
 
