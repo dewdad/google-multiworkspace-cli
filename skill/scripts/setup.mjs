@@ -6,7 +6,7 @@
  * Actions:
  * 1. Verify Node.js >= 18
  * 2. Install @googleworkspace/cli (gws) globally if missing
- * 3. Install google-workspace-cli (gwcli) globally if missing
+ * 3. Install multi-gws-cli (gwcli) globally if missing
  * 4. Create config directory structure
  * 5. Report status as JSON
  */
@@ -67,7 +67,7 @@ step('install-gwcli', () => {
     execSync('gwcli --version', { encoding: 'utf-8', timeout: 10000, stdio: 'pipe', ...shellOpt });
     return 'already installed';
   } catch {
-    log('  Installing google-workspace-cli globally from GitHub...');
+    log('  Installing multi-gws-cli globally from GitHub...');
     // Not on the npm registry yet — install directly from the GitHub repo.
     // npm will clone, run `prepare` (tsc) to build dist/, then link the gwcli bin.
     execSync('npm install -g github:dewdad/multi-gws-cli', { stdio: 'pipe', timeout: 180000, ...shellOpt });

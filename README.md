@@ -1,4 +1,4 @@
-# google-workspace-cli (`gwcli`)
+# multi-gws-cli (`gwcli`)
 
 Multi-profile orchestration layer over the official **[`gws`](https://github.com/googleworkspace/cli)** CLI. Adds named profiles (like AWS CLI), per-profile credential isolation, and AI-agent-friendly defaults to Google Workspace's command-line tooling.
 
@@ -169,7 +169,7 @@ Set `gwsBinary` to an absolute path if `gws` isn't on `PATH`, or to pin a specif
 This repo ships an AI skill at [`skill/SKILL.md`](skill/SKILL.md) that teaches Claude Code, OpenCode, Cursor, etc. how to drive `gwcli`. Install it via [skillshare](https://github.com/runkids/skillshare):
 
 ```bash
-skillshare install google-workspace-cli
+skillshare install multi-gws-cli
 ```
 
 Or point your agent's skill loader at `skill/SKILL.md` directly. The skill includes a mandatory `gwcli preflight` step (silent on success, exit codes `60–69` on remediable issues) and full per-service references under `skill/references/`.

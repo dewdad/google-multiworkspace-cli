@@ -6,7 +6,7 @@
 > code/docs sweep). Issue 11 (`package.json` upstream attribution) shipped
 > earlier in `4e848e3`. Issue 1 was the open release-decision item; we picked
 > **Option B (GitHub install)** — `npm install -g
-> github:dewdad/google-multiworkspace-cli` — and a `prepare: tsc` script in
+> github:dewdad/multi-gws-cli` — and a `prepare: tsc` script in
 > `package.json` so the install builds `dist/` automatically. Switching to the
 > npm registry (Option A) is still on the table later; the install string is
 > the only thing that needs to change.
@@ -14,7 +14,7 @@
 ## Context
 
 This plan captures every defect / friction point uncovered while installing the
-`google-workspace` skill from `dewdad/google-multiworkspace-cli` via `skillshare`
+`google-workspace` skill from `dewdad/multi-gws-cli` via `skillshare`
 on a clean Windows host (PowerShell 7) and bootstrapping three personal Google
 accounts (`avitalbennatan`, `avitalidit`, `haavital`) end-to-end.
 
@@ -91,7 +91,7 @@ but `gwcli` itself has no install vector for outsiders.
   - Update `SKILL.md` step 0a accordingly.
 - **B. Install from GitHub directly.** Replace `SKILL.md` step 0a with:
   ```bash
-  npm install -g github:dewdad/google-multiworkspace-cli
+  npm install -g github:dewdad/multi-gws-cli
   ```
   Cheaper but slower (no semver, no audit).
 - **C. Ship via `skillshare extras` as a hosted binary.** Heaviest; only worth it
@@ -409,7 +409,7 @@ Error: Invalid profile name 'avital.bennatan'.
 // SKILL.md:  homepage: "https://github.com/ianpatrickhines/google-workspace-cli"
 ```
 
-This is a fork (`dewdad/google-multiworkspace-cli`). `gwcli setup` reads
+This is a fork (`dewdad/multi-gws-cli`). `gwcli setup` reads
 `homepage` for "check for updates" links.
 
 **Fix:** update both files to point at this fork (or to a vendor-neutral name

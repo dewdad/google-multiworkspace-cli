@@ -133,7 +133,7 @@ become a no-op if their precondition is already satisfied.
 npm install -g @dewdad/google-workspace-cli   # or whichever final name
 
 # OR for project-pinned installs:
-skillshare install dewdad/google-multiworkspace-cli/skill --track
+skillshare install dewdad/multi-gws-cli/skill --track
 skillshare sync
 ```
 
