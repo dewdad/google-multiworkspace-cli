@@ -105,4 +105,4 @@ When the user requests a durable behavior change, record it here or in the relev
   - `src/commands/AGENTS.md` — native mgws commands (profiles incl. reauth/rescope, init, agenda, doctor, migrate, preflight, setup) + shared `onboard` core + preflight exit-code namespace.
 - `multi-gws/AGENTS.md` — bundled, self-improving AI skill teaching agents to drive `mgws`; owns `SKILL.md`, `references/`, `scripts/`, `bin/`.
 
-Not indexed (transient/tooling): `dist/` (build output), `node_modules/`, `.github/workflows/`, `plans/`, `.omo/`, `.sisyphus/`, `.codegraph/`.
+Not indexed (transient/tooling): `dist/` (build output), `node_modules/`, `.github/workflows/`, `.omo/`, `.sisyphus/`, `.codegraph/`.
