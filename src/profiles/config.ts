@@ -1,23 +1,23 @@
 import { homedir, platform } from 'os';
 import { join } from 'path';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from 'fs';
-import { GwcliError, type GlobalConfig, type ProfileMeta } from '../types/index.js';
+import { MgwsError, type GlobalConfig, type ProfileMeta } from '../types/index.js';
 
 // ─── Path Resolution ─────────────────────────────────────────────────────────
 
 function getConfigRoot(): string {
-  if (process.env['GWCLI_CONFIG_DIR']) {
-    return process.env['GWCLI_CONFIG_DIR'];
+  if (process.env['MGWS_CONFIG_DIR']) {
+    return process.env['MGWS_CONFIG_DIR'];
   }
 
   if (platform() === 'win32') {
     const appData = process.env['APPDATA'];
     if (appData) {
-      return join(appData, 'gwcli');
+      return join(appData, 'mgws');
     }
   }
 
-  return join(homedir(), '.config', 'gwcli');
+  return join(homedir(), '.config', 'mgws');
 }
 
 export const CONFIG_ROOT = getConfigRoot();
@@ -65,7 +65,7 @@ export function getGlobalConfig(): GlobalConfig {
   try {
     raw = JSON.parse(readFileSync(CONFIG_FILE, 'utf-8'));
   } catch {
-    throw new GwcliError(
+    throw new MgwsError(
       `Failed to parse config file: ${CONFIG_FILE}`,
       'CONFIG_CORRUPTED',
       `Delete or repair ${CONFIG_FILE} and re-run the command.`
@@ -96,10 +96,10 @@ export function getProfileMeta(profileName: string): ProfileMeta | null {
   try {
     return JSON.parse(readFileSync(metaPath, 'utf-8'));
   } catch {
-    throw new GwcliError(
+    throw new MgwsError(
       `Failed to parse profile metadata: ${metaPath}`,
       'PROFILE_META_CORRUPTED',
-      `Delete or repair ${metaPath} and re-authenticate: gwcli profiles auth ${profileName}`
+      `Delete or repair ${metaPath} and re-authenticate: mgws profiles auth ${profileName}`
     );
   }
 }

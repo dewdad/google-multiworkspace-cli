@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { delimiter, dirname, extname, isAbsolute, join } from 'node:path';
 import { platform } from 'node:os';
-import { GwcliError, type GwsBinaryInfo } from '../types/index.js';
+import { MgwsError, type GwsBinaryInfo } from '../types/index.js';
 import { getGlobalConfig } from '../profiles/config.js';
 
 export interface GwsSpawnCommand {
@@ -25,15 +25,15 @@ export function findGwsBinary(): GwsBinaryInfo {
   });
 
   if (result.error) {
-    throw new GwcliError(
+    throw new MgwsError(
       `Cannot find gws binary: '${binary}'`,
       'GWS_NOT_FOUND',
-      'Install gws: npm install -g @googleworkspace/cli\nOr set custom path in ~/.config/gwcli/config.json → gwsBinary'
+      'Install gws: npm install -g @googleworkspace/cli\nOr set custom path in ~/.config/mgws/config.json → gwsBinary'
     );
   }
 
   if (result.status !== 0) {
-    throw new GwcliError(
+    throw new MgwsError(
       `gws binary at '${binary}' returned error on --version check.`,
       'GWS_VERSION_FAILED',
       `stderr: ${result.stderr?.trim() ?? '(empty)'}`

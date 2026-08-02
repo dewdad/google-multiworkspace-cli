@@ -1,15 +1,15 @@
 {
-  "name": "multi-gws-cli",
+  "name": "multi-gws",
   "version": "2.4.0",
   "description": "Multi-profile Google Workspace CLI — orchestration layer over gws. Installable as AI skill via skillshare.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "gwcli": "dist/index.js"
+    "mgws": "dist/index.js"
   },
   "files": [
     "dist/",
-    "skill/"
+    "multi-gws/"
   ],
   "scripts": {
     "build": "tsc",
@@ -19,7 +19,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "clean": "rm -rf dist",
-    "skill:setup": "node skill/scripts/setup.mjs",
+    "skill:setup": "node multi-gws/scripts/setup.mjs",
     "prepare": "tsc"
   },
   "keywords": [
@@ -51,7 +51,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/dewdad/multi-gws-cli.git"
+    "url": "https://github.com/dewdad/multi-gws.git"
   },
   "dependencies": {
     "chalk": "^5.3.0",
@@ -70,8 +70,8 @@
     "node": ">=18.0.0"
   },
   "skillshare": {
-    "skill-dir": "skill",
-    "name": "google-workspace",
+    "skill-dir": "multi-gws",
+    "name": "multi-gws",
     "description": "Google Workspace access for AI agents — Gmail, Calendar, Drive, Docs, Sheets, Slides, Tasks, Keep, People/Contacts, Chat, Meet, Forms."
   }
 }

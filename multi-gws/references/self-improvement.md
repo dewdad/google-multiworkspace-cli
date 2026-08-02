@@ -8,14 +8,14 @@ When you find a problem (wrong command, missing flag, broken example, unclear in
 
 1. **Edit the relevant file directly** using your file-editing tools (e.g. the `edit` or `write` tools in your harness). The skill is a regular directory of markdown + scripts — no special update mechanism is needed.
 2. **Keep changes minimal and targeted.** One issue per edit. Preserve unrelated content.
-3. **Verify** that your change doesn't break anything: `gwcli doctor` for runtime, `npm test` (in the project repo) for code changes.
+3. **Verify** that your change doesn't break anything: `mgws doctor` for runtime, `npm test` (in the project repo) for code changes.
 4. **Note the change in your final response** so the user can review and propagate it (e.g. via git commit, skillshare publish, or upstream PR).
 
 ## What you may modify
 
 - `SKILL.md` — top-level commands, summary tables, error recovery
 - `references/*.md` — service-specific commands and recipes
-- `scripts/*.mjs` — diagnostic scripts (preflight, doctor, setup) — kept for compatibility; native `gwcli preflight`/`setup`/`doctor` are preferred entry points
+- `scripts/*.mjs` — diagnostic scripts (preflight, doctor, setup) — kept for compatibility; native `mgws preflight`/`setup`/`doctor` are preferred entry points
 
 ## What you must NOT modify without explicit user approval
 
@@ -26,7 +26,7 @@ When you find a problem (wrong command, missing flag, broken example, unclear in
 ## Removing functionality
 
 Never delete an existing command, reference section, or example unless:
-- It's documented as wrong in the actual `gws`/`gwcli` source, AND
+- It's documented as wrong in the actual `gws`/`mgws` source, AND
 - You've replaced it with a working equivalent, AND
 - You've explained the change in your response.
 
@@ -45,8 +45,8 @@ There is no automatic phone-home or feedback channel from this skill — improve
 ### 2.3.0
 - **Operating principle added (top of SKILL.md): "the binary is the source of
   truth."** Establishes a fast-path → self-heal → live-state hierarchy: use the
-  documented example first, but on any surface mismatch trust `gwcli <cmd>
-  --help` / `gwcli setup` over the prose, and query the CLI
+  documented example first, but on any surface mismatch trust `mgws <cmd>
+  --help` / `mgws setup` over the prose, and query the CLI
   (`profiles list/status`, `preflight`, `doctor`) for live system facts instead
   of assuming. Explicitly scopes what the docs still own and the CLI can't
   self-report: operational gotchas, the interactive OAuth flow, and decision
@@ -59,14 +59,14 @@ There is no automatic phone-home or feedback channel from this skill — improve
   across SKILL.md + all references: request body → **`--json`**; field masks →
   a **`"fields"` key inside `--params`**. Verified live against gws 0.22.5
   (`--help` + a working masked Gmail list call). Root cause was a doc bug, not
-  version drift (installed == upstream 2.1.0; the gwcli wrapper is a pure
+  version drift (installed == upstream 2.1.0; the mgws wrapper is a pure
   argv passthrough and used 0 bad flags).
 - **New: binary upload docs.** Documented `--upload` / `--upload-content-type`
   for Drive create and Gmail send, including the constraint that `--upload`
   only accepts a **relative path inside the current working directory**.
 - **New: output-parsing note.** JSON is on stdout; the `Using keyring backend:
   file` line is on stderr — capture stdout only before parsing.
-- **New: activation keeps `gws` current.** Step 0a now runs `gwcli setup`
+- **New: activation keeps `gws` current.** Step 0a now runs `mgws setup`
   (installs latest gws by default; `--gws-version` to pin) on activation and on
   preflight `63`. (Corrected an earlier draft that referenced a nonexistent
   `--update` flag.)

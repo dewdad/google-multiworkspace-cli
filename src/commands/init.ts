@@ -5,7 +5,7 @@ import { profileExists, getProfileMeta, hasAuthArtifacts } from '../profiles/con
 import { runGwsAuthLogin } from '../gws/runner.js';
 import { refreshProfileEmail } from '../profiles/index.js';
 import { DEFAULT_SERVICES, isFullAccess } from '../profiles/scopes.js';
-import { GwcliError } from '../types/index.js';
+import { MgwsError } from '../types/index.js';
 
 export interface InitOptions {
   scopes?: string;
@@ -75,10 +75,10 @@ export async function runInit(nameArg: string | undefined, options: InitOptions 
     if (interactive) {
       name = await promptLine('Profile name [personal]: ', 'personal');
     } else {
-      throw new GwcliError(
+      throw new MgwsError(
         'A profile name is required.',
         'INIT_NEEDS_NAME',
-        'Provide one, e.g.: gwcli init personal'
+        'Provide one, e.g.: mgws init personal'
       );
     }
   }
@@ -92,7 +92,7 @@ export async function runInit(nameArg: string | undefined, options: InitOptions 
         console.log(
           alreadyAuthed
             ? `Profile '${name}' already exists and is authenticated. Nothing to do.`
-            : `Profile '${name}' already exists (not authenticated). Run: gwcli profiles auth ${name}`
+            : `Profile '${name}' already exists (not authenticated). Run: mgws profiles auth ${name}`
         );
       }
       emit({ success: true, profile: name, created: false, authenticated: alreadyAuthed, email: getProfileMeta(name)?.email ?? null, isDefault: false });
@@ -108,7 +108,7 @@ export async function runInit(nameArg: string | undefined, options: InitOptions 
       fullAccess: isFullAccess(storedScopes),
     });
     if (result.exitCode !== 0) {
-      throw new GwcliError(`Authentication failed for profile '${name}' (exit ${result.exitCode}).`, 'AUTH_FAILED', `Re-run: gwcli profiles auth ${name}`);
+      throw new MgwsError(`Authentication failed for profile '${name}' (exit ${result.exitCode}).`, 'AUTH_FAILED', `Re-run: mgws profiles auth ${name}`);
     }
     let email: string | null = null;
     try { email = refreshProfileEmail(name); } catch { /* non-fatal */ }
@@ -152,10 +152,10 @@ export async function runInit(nameArg: string | undefined, options: InitOptions 
       console.log(`Profile '${name}' authenticated successfully.`);
       if (result.email) console.log(`Identity: ${result.email}`);
     } else {
-      console.log(`Skipping auth. Run later: gwcli profiles auth ${name}`);
+      console.log(`Skipping auth. Run later: mgws profiles auth ${name}`);
     }
     if (result.isDefault) console.log(`Set as the default profile.`);
-    console.log(`\nReady. Try: gwcli --profile ${name} agenda --days 7`);
+    console.log(`\nReady. Try: mgws --profile ${name} agenda --days 7`);
   }
   emit({ success: true, profile: name, created: true, authenticated: result.authenticated, email: result.email, isDefault: result.isDefault });
 }

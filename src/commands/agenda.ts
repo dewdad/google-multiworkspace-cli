@@ -1,6 +1,6 @@
 import { resolveProfile } from '../profiles/resolver.js';
 import { runGws } from '../gws/runner.js';
-import { GwcliError } from '../types/index.js';
+import { MgwsError } from '../types/index.js';
 
 export interface AgendaOptions {
   profileFlag?: string;
@@ -19,7 +19,7 @@ export interface AgendaOptions {
  */
 export function runAgenda(options: AgendaOptions): never {
   if (!Number.isFinite(options.days) || options.days <= 0) {
-    throw new GwcliError(
+    throw new MgwsError(
       `Invalid --days value: ${options.days}`,
       'INVALID_AGENDA_DAYS',
       'Use a positive integer like --days 7'
@@ -27,7 +27,7 @@ export function runAgenda(options: AgendaOptions): never {
   }
 
   if (!Number.isFinite(options.maxResults) || options.maxResults <= 0) {
-    throw new GwcliError(
+    throw new MgwsError(
       `Invalid --max value: ${options.maxResults}`,
       'INVALID_AGENDA_MAX',
       'Use a positive integer like --max 50'

@@ -2,19 +2,19 @@
 
 ## Default: just add a profile
 
-`gwcli` ships with a built-in Desktop OAuth client, so the normal path needs no
+`mgws` ships with a built-in Desktop OAuth client, so the normal path needs no
 Cloud Console setup and no client JSON:
 
 ```bash
-gwcli profiles add personal
+mgws profiles add personal
 ```
 
-This opens a browser for consent against gwcli's built-in client and stores your
+This opens a browser for consent against mgws's built-in client and stores your
 tokens under the profile's isolated `gws` config dir. That's the whole flow for
 most users — you can stop reading here.
 
 The built-in client can be overridden at runtime (e.g. to ship an org-specific
-client) via the `GWCLI_CLIENT_ID` / `GWCLI_CLIENT_SECRET` environment variables,
+client) via the `MGWS_CLIENT_ID` / `MGWS_CLIENT_SECRET` environment variables,
 without rebuilding.
 
 > **Why shipping a client secret is safe:** the built-in client is a
@@ -30,10 +30,10 @@ Workspace consent screen, or full control over the Cloud project. Pass it with
 `--client <path>`:
 
 ```bash
-gwcli profiles add work --client ~/Downloads/client_secret_*.json
+mgws profiles add work --client ~/Downloads/client_secret_*.json
 ```
 
-When `--client` is given, gwcli copies that `client_secret.json` into the
+When `--client` is given, mgws copies that `client_secret.json` into the
 profile's `gws` config dir, and it takes precedence over the built-in client for
 that profile.
 
@@ -48,7 +48,7 @@ that profile.
 A Google Cloud project with the OAuth consent screen configured + a Desktop
 **OAuth client ID** whose `client_secret` you have captured to a JSON file.
 
-This file is the `--client <path>` argument to `gwcli profiles add`.
+This file is the `--client <path>` argument to `mgws profiles add`.
 
 ### Manual flow (most reliable)
 
@@ -67,8 +67,8 @@ This file is the `--client <path>` argument to `gwcli profiles add`.
 
    > **⚠ Testing-mode ~25-scope cap.** While the app is **unverified** (consent
    > screen in "Testing"), Google limits consent to **~25 OAuth scopes**. Each
-   > `gwcli` service maps to several scopes, so the default profile set is
-   > already near the ceiling and `gwcli profiles add ... --full` (all scopes
+   > `mgws` service maps to several scopes, so the default profile set is
+   > already near the ceiling and `mgws profiles add ... --full` (all scopes
    > incl. Pub/Sub + Cloud Platform) will typically **exceed it and fail
    > consent** — most visibly on personal `@gmail.com` accounts. To grant broad
    > or full access, either narrow with `--scopes`, **verify** the OAuth app, or
@@ -85,15 +85,15 @@ This file is the `--client <path>` argument to `gwcli profiles add`.
    created". It has a **Download JSON** button. Click it. Save the file to a
    path you'll remember — for example:
    ```text
-   ~/.config/gwcli/secrets/google-oauth-client.json   (Linux/Mac)
-   %USERPROFILE%\.config\gwcli\secrets\google-oauth-client.json   (Windows)
+   ~/.config/mgws/secrets/google-oauth-client.json   (Linux/Mac)
+   %USERPROFILE%\.config\mgws\secrets\google-oauth-client.json   (Windows)
    ```
    Treat this file like a password. **Do not commit it to git.** It contains
    the only copy of `client_secret` that Google will ever give you.
 
 6. **Add the profile:**
    ```bash
-   gwcli profiles add personal --client ~/.config/gwcli/secrets/google-oauth-client.json
+   mgws profiles add personal --client ~/.config/mgws/secrets/google-oauth-client.json
    ```
    (Or whatever path you saved it to.) A browser opens, you authenticate, and
    tokens land in your config dir.
@@ -142,7 +142,7 @@ client-X). The OAuth client identifies the *application*, not the user — each
 profile authenticates a distinct *user* against that application. So:
 
 - One OAuth client + one downloaded JSON = enough for all profiles.
-- Pass the same `--client <path>` to every `gwcli profiles add` invocation.
+- Pass the same `--client <path>` to every `mgws profiles add` invocation.
 - Google's free-tier OAuth quotas are per-client, not per-user.
 
 If you're a Workspace admin managing multiple end users, create one OAuth
@@ -153,11 +153,11 @@ client per logical environment (dev / staging / prod) — not per user.
 After `profiles add` completes:
 
 ```bash
-gwcli profiles list --format json
+mgws profiles list --format json
 # Should show: "email": "you@gmail.com", "authenticated": true
 ```
 
-If `email` is `null`, run `gwcli profiles status <name>` — the lazy backfill
+If `email` is `null`, run `mgws profiles status <name>` — the lazy backfill
 will populate it on next read.
 
 ## See also

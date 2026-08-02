@@ -23,18 +23,18 @@ export interface EnsureSetupResult {
 }
 
 /**
- * Run the idempotent setup steps (verify gwcli, install/verify gws, create
+ * Run the idempotent setup steps (verify mgws, install/verify gws, create
  * config dirs) WITHOUT emitting output or exiting the process.
  *
- * Extracted so orchestrators like `gwcli init` can guarantee gws is installed
+ * Extracted so orchestrators like `mgws init` can guarantee gws is installed
  * before adding a profile, then render their own summary. `runSetup` wraps this
  * with human/JSON output and a process exit.
  */
 export function ensureSetup(gwsVersion?: string): EnsureSetupResult {
   const steps: SetupStep[] = [];
 
-  // 1. Verify gwcli is invokable (trivially true: we're it)
-  steps.push({ name: 'gwcli', status: 'ok', detail: 'present' });
+  // 1. Verify mgws is invokable (trivially true: we're it)
+  steps.push({ name: 'mgws', status: 'ok', detail: 'present' });
 
   // 2. Verify gws package exists on registry before attempting install
   steps.push(verifyPackageAvailable(GWS_PACKAGE));
@@ -54,10 +54,10 @@ export function ensureSetup(gwsVersion?: string): EnsureSetupResult {
 /**
  * Install gws and verify dependencies. Idempotent.
  *
- * Bootstrapping note: gwcli itself must already be installed for this command
- * to run. Users install gwcli via
- * `npm install -g github:dewdad/multi-gws-cli`
- * (the package is not on the npm registry yet), then `gwcli setup` handles the
+ * Bootstrapping note: mgws itself must already be installed for this command
+ * to run. Users install mgws via
+ * `npm install -g github:dewdad/multi-gws`
+ * (the package is not on the npm registry yet), then `mgws setup` handles the
  * rest (gws + config dirs).
  */
 export async function runSetup(options: SetupOptions = {}): Promise<void> {
@@ -73,8 +73,8 @@ export async function runSetup(options: SetupOptions = {}): Promise<void> {
     if (success) {
       process.stdout.write('\nSetup complete. Add your first Google account — the built-in OAuth client\n');
       process.stdout.write('means no --client is needed:\n');
-      process.stdout.write('  gwcli init <name>            # one step: create profile + authenticate\n');
-      process.stdout.write('  gwcli profiles add <name>    # same, without the setup pre-check\n');
+      process.stdout.write('  mgws init <name>            # one step: create profile + authenticate\n');
+      process.stdout.write('  mgws profiles add <name>    # same, without the setup pre-check\n');
     } else {
       process.stdout.write('\nSetup failed. See errors above.\n');
     }

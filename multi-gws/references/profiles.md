@@ -5,8 +5,8 @@ Profiles are named Google accounts. Each profile stores OAuth credentials indepe
 ## Concepts
 
 - **Profile** = named credential set (like AWS CLI profiles)
-- **Config dir** = `~/.config/gwcli/` (Linux/Mac) or `%APPDATA%\gwcli\` (Windows)
-- **Resolution order**: `--profile` flag → `GWCLI_PROFILE` env → default profile → error
+- **Config dir** = `~/.config/mgws/` (Linux/Mac) or `%APPDATA%\mgws\` (Windows)
+- **Resolution order**: `--profile` flag → `MGWS_PROFILE` env → default profile → error
 
 ## On-disk layout (managed by the CLI — do not hand-edit)
 
@@ -27,9 +27,9 @@ Profiles are named Google accounts. Each profile stores OAuth credentials indepe
 
 Each profile is fully self-contained under `profiles/<name>/`, which is what
 makes cross-profile parallelism safe (see Concurrency Rules). **Never move,
-rename, or edit these files by hand** — use `gwcli profiles rename` / `remove`
+rename, or edit these files by hand** — use `mgws profiles rename` / `remove`
 so `config.json` (e.g. `defaultProfile`) stays consistent. To relocate the whole
-store, set `GOOGLE_WORKSPACE_CLI_CONFIG_DIR` / the gwcli config dir rather than
+store, set `GOOGLE_WORKSPACE_CLI_CONFIG_DIR` / the mgws config dir rather than
 moving directories.
 
 ## Profile organization & naming conventions
@@ -50,25 +50,25 @@ Attach a human label with **`--display-name`** at add time (stored in
 `proj-zikhron` still reads clearly:
 
 ```bash
-gwcli profiles add proj-zikhron --client ./secret.json --display-name "Zikhron build (avitalidit@gmail.com)"
+mgws profiles add proj-zikhron --client ./secret.json --display-name "Zikhron build (avitalidit@gmail.com)"
 ```
 
 Housekeeping tips:
-- The **first profile is auto-set as default** (by both `gwcli init` and
-  `gwcli profiles add`). Use `gwcli profiles set-default <name>` only to switch
+- The **first profile is auto-set as default** (by both `mgws init` and
+  `mgws profiles add`). Use `mgws profiles set-default <name>` only to switch
   the default to a different, most-used profile; pass `--profile` for exceptions.
 - `meta.json` records `email`, `scopes`, `lastUsed`, and a `tags[]` array. `tags`
   is currently populated by the CLI/metadata (there is **no `--tags` flag** on
   `add` as of gws 0.22.x) — treat it as read-only metadata for now, and rely on
   the naming/`--display-name` scheme above for organization.
-- Rename freely with `gwcli profiles rename <old> <new>` if a scheme evolves —
+- Rename freely with `mgws profiles rename <old> <new>` if a scheme evolves —
   it updates `config.json` references for you.
 
 ## Commands
 
 ### List All Profiles
 ```bash
-gwcli profiles list --format json
+mgws profiles list --format json
 ```
 Returns:
 ```json
@@ -80,16 +80,16 @@ Returns:
 
 ### One-Step Onboarding (preferred)
 ```bash
-gwcli init <name> [--scopes <list> | --full] [--client <path>] [--display-name "My Work"] [--json] [--yes]
+mgws init <name> [--scopes <list> | --full] [--client <path>] [--display-name "My Work"] [--json] [--yes]
 ```
 `init` ensures `gws` is installed, creates the profile, authenticates, and auto-sets it as default when it's the first. It is **non-interactive in a non-TTY** (agent/CI): pass a name + flags and it never hangs on a prompt; in a real terminal it prompts for the name/services when omitted. `--json` emits a summary. It's idempotent — an existing profile is re-authed rather than recreated.
 
 ### Add a New Profile
 ```bash
-gwcli profiles add <name> [--client <path-to-oauth-json>] [--scopes <list> | --full] [--display-name "My Work"]
+mgws profiles add <name> [--client <path-to-oauth-json>] [--scopes <list> | --full] [--display-name "My Work"]
 ```
 
-**`--client` is optional.** `gwcli` ships a built-in Desktop OAuth client, so `profiles add <name>` works with no client file. Provide `--client <path>` only to use your own / verified OAuth app — see [`oauth-bootstrap.md`](oauth-bootstrap.md) (Google's "Download JSON" modal is one-shot; capture in a real browser, not headless automation). `profiles add` assumes `gws` is already installed; `gwcli init` bundles the setup pre-check.
+**`--client` is optional.** `mgws` ships a built-in Desktop OAuth client, so `profiles add <name>` works with no client file. Provide `--client <path>` only to use your own / verified OAuth app — see [`oauth-bootstrap.md`](oauth-bootstrap.md) (Google's "Download JSON" modal is one-shot; capture in a real browser, not headless automation). `profiles add` assumes `gws` is already installed; `mgws init` bundles the setup pre-check.
 
 If the OAuth flow fails (timeout, browser closed, consent declined), both `init` and `profiles add` roll back automatically — the partial profile directory is removed so you can retry with the same name.
 
@@ -102,19 +102,19 @@ If the OAuth flow fails (timeout, browser closed, consent declined), both `init`
 
 ```bash
 # All mainstream services (default), built-in client — no --client needed
-gwcli profiles add personal
+mgws profiles add personal
 
 # Restricted set
-gwcli profiles add work --scopes gmail,calendar,drive
+mgws profiles add work --scopes gmail,calendar,drive
 
 # Include an opt-in extra
-gwcli profiles add edu --scopes gmail,drive,classroom
+mgws profiles add edu --scopes gmail,drive,classroom
 
 # Everything
-gwcli profiles add admin --full
+mgws profiles add admin --full
 
 # Your own / verified OAuth client (optional)
-gwcli profiles add corp --client ~/client.json --scopes gmail,calendar
+mgws profiles add corp --client ~/client.json --scopes gmail,calendar
 ```
 
 > **⚠ Testing-mode scope limit.** Google caps consent for an **unverified** OAuth app (consent screen in "Testing") at **~25 OAuth scopes**. Each service maps to several scopes, so:
@@ -127,40 +127,40 @@ After creating, the CLI opens a browser for OAuth consent. The user must authent
 
 ### Remove a Profile
 ```bash
-gwcli profiles remove <name> --force
+mgws profiles remove <name> --force
 ```
 **`--force` is required** — the command refuses to delete without it (no interactive prompts in CLI mode). Deletes credentials and metadata. Irreversible.
 
 ### Rename a Profile
 ```bash
-gwcli profiles rename <old> <new>
+mgws profiles rename <old> <new>
 ```
 
 ### Set Default Profile
 ```bash
-gwcli profiles set-default <name>
+mgws profiles set-default <name>
 ```
 
 ### Re-authenticate (refresh expired tokens)
 ```bash
-gwcli profiles auth <name>                       # uses the profile's stored scopes
-gwcli profiles auth <name> --scopes gmail,calendar  # override (still subject to immutability rule below)
-gwcli profiles auth <name> --full                # re-authenticate requesting ALL scopes
-gwcli profiles reauth                            # re-auth ALL profiles, serialized
-gwcli profiles reauth --stale-only               # only profiles whose token is invalid/expired
+mgws profiles auth <name>                       # uses the profile's stored scopes
+mgws profiles auth <name> --scopes gmail,calendar  # override (still subject to immutability rule below)
+mgws profiles auth <name> --full                # re-authenticate requesting ALL scopes
+mgws profiles reauth                            # re-auth ALL profiles, serialized
+mgws profiles reauth --stale-only               # only profiles whose token is invalid/expired
 ```
 Opens a browser for a fresh OAuth flow. Use when tokens expire. `profiles reauth` walks every profile one at a time (never in parallel — each auth grabs its own callback port + the shared browser window), re-using each profile's stored scopes so there's no picker; `--stale-only` probes `gws auth status` and skips profiles whose token is still valid.
 
-> **`profiles auth` reuses the existing scope set.** It does **not** prompt for new scopes. A profile created with `--full` stores a full-access sentinel and is automatically re-authenticated with `--full`. To **change** the scope set, use `gwcli profiles rescope <name> --add <svc>` (or `--remove`/`--set`/`--full`) — it removes + re-adds + re-auths in one step, preserving the display name and any custom OAuth client.
+> **`profiles auth` reuses the existing scope set.** It does **not** prompt for new scopes. A profile created with `--full` stores a full-access sentinel and is automatically re-authenticated with `--full`. To **change** the scope set, use `mgws profiles rescope <name> --add <svc>` (or `--remove`/`--set`/`--full`) — it removes + re-adds + re-auths in one step, preserving the display name and any custom OAuth client.
 
 > **Non-TTY behavior.** `profiles auth` always passes `--services` to the underlying gws so the interactive scope picker is bypassed. In CI / agent / `Start-Process`-style environments where stdin is not a TTY, the command refuses to run if no stored or `--scopes` value is available — it would otherwise hang forever waiting for keystrokes that never arrive.
 
 ### Check Auth Status
 ```bash
-gwcli profiles status <name>                       # single profile (gws JSON output)
-gwcli profiles status                              # all profiles (table when TTY, JSON when piped)
-gwcli profiles status --format json                # force JSON for all
-gwcli profiles status --format json --strict       # exits 2 if ANY profile is unauthenticated
+mgws profiles status <name>                       # single profile (gws JSON output)
+mgws profiles status                              # all profiles (table when TTY, JSON when piped)
+mgws profiles status --format json                # force JSON for all
+mgws profiles status --format json --strict       # exits 2 if ANY profile is unauthenticated
 ```
 
 The `--strict` flag is the recommended pre-flight for bulk multi-account operations: run it first, fix any unauthenticated profiles, then proceed.
@@ -169,30 +169,30 @@ The `--strict` flag is the recommended pre-flight for bulk multi-account operati
 
 ### Using Specific Profile for One Command
 ```bash
-gwcli --profile work gmail users messages list --params '{"userId":"me","maxResults":5}'
+mgws --profile work gmail users messages list --params '{"userId":"me","maxResults":5}'
 ```
 
 ### Environment Variable Override
 ```bash
 # POSIX
-GWCLI_PROFILE=personal gwcli agenda --days 3
+MGWS_PROFILE=personal mgws agenda --days 3
 
 # PowerShell
-$env:GWCLI_PROFILE = "personal"; gwcli agenda --days 3
+$env:MGWS_PROFILE = "personal"; mgws agenda --days 3
 ```
 
 ### Cross-Account Operations
 
 ```bash
 # POSIX (bash/zsh)
-work_emails=$(gwcli --profile work gmail users messages list --params '{"userId":"me","q":"meeting invite","maxResults":1}')
-gwcli --profile personal calendar events insert --params '{"calendarId":"primary"}' --json '<event>'
+work_emails=$(mgws --profile work gmail users messages list --params '{"userId":"me","q":"meeting invite","maxResults":1}')
+mgws --profile personal calendar events insert --params '{"calendarId":"primary"}' --json '<event>'
 ```
 
 ```powershell
 # PowerShell
-$work_emails = gwcli --profile work gmail users messages list --params '{"userId":"me","q":"meeting invite","maxResults":1}'
-gwcli --profile personal calendar events insert --params '{"calendarId":"primary"}' --json '<event>'
+$work_emails = mgws --profile work gmail users messages list --params '{"userId":"me","q":"meeting invite","maxResults":1}'
+mgws --profile personal calendar events insert --params '{"calendarId":"primary"}' --json '<event>'
 ```
 
 ### Concurrency Rules
@@ -202,7 +202,7 @@ gwcli --profile personal calendar events insert --params '{"calendarId":"primary
 
 ## Advanced Configuration
 
-The global config file (`~/.config/gwcli/config.json` on Linux/Mac, `%APPDATA%\gwcli\config.json` on Windows) supports:
+The global config file (`~/.config/mgws/config.json` on Linux/Mac, `%APPDATA%\mgws\config.json` on Windows) supports:
 
 ```json
 {
@@ -217,7 +217,7 @@ The global config file (`~/.config/gwcli/config.json` on Linux/Mac, `%APPDATA%\g
 ```
 
 - **`gwsBinary`** — absolute path or PATH-resolvable name. Set to a non-default location for monorepo `node_modules/.bin/gws`, Docker-mounted binaries, or pinned versions.
-- **`defaultProfile`** — used when neither `--profile` nor `GWCLI_PROFILE` is set.
+- **`defaultProfile`** — used when neither `--profile` nor `MGWS_PROFILE` is set.
 - **`settings.defaultFormat`** — passed to gws for passthrough commands.
 
 ## OAuth Client Setup Guide (for helping users)
@@ -233,26 +233,26 @@ The global config file (`~/.config/gwcli/config.json` on Linux/Mac, `%APPDATA%\g
 5. Click **Create Credentials > OAuth client ID**
 6. Application type: **Desktop app**
 7. Download the JSON file
-8. Provide path to: `gwcli profiles add <name> --client <downloaded-file.json>`
+8. Provide path to: `mgws profiles add <name> --client <downloaded-file.json>`
 
-> **About `gws`:** The underlying tool (`@googleworkspace/cli`) is community-maintained and explicitly not an officially supported Google product. Major API changes in `gws` releases can affect this skill. If commands break after a `gws` upgrade, run `gwcli doctor` and check the [troubleshooting reference](./troubleshooting.md).
+> **About `gws`:** The underlying tool (`@googleworkspace/cli`) is community-maintained and explicitly not an officially supported Google product. Major API changes in `gws` releases can affect this skill. If commands break after a `gws` upgrade, run `mgws doctor` and check the [troubleshooting reference](./troubleshooting.md).
 
 ### gws version compatibility
 
 | gws range | Status | Notes |
 |-----------|--------|-------|
-| `< 0.20.0` | Not supported | `gwcli setup` rejects with "below minimum" error |
+| `< 0.20.0` | Not supported | `mgws setup` rejects with "below minimum" error |
 | `0.20.x – 0.22.x` | Tested | Current reference target |
 | `0.23.x +` | Best-effort | Likely works; watch for breaking changes in `gws --help` |
-| `1.0.0 +` | Unknown | Future major; verify with `gwcli doctor` and the gws changelog before relying on it |
+| `1.0.0 +` | Unknown | Future major; verify with `mgws doctor` and the gws changelog before relying on it |
 
-The minimum is enforced in `gwcli setup`. Other versions degrade gracefully — if a specific gws command surface changes, the gwcli passthrough still forwards arguments verbatim, so the user only sees gws's own error message.
+The minimum is enforced in `mgws setup`. Other versions degrade gracefully — if a specific gws command surface changes, the mgws passthrough still forwards arguments verbatim, so the user only sees gws's own error message.
 
 ## Troubleshooting Profiles
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| "No profile specified" | No default, no --profile | `gwcli profiles set-default <name>` |
-| "Profile not authenticated" | Tokens missing/expired | `gwcli profiles auth <name>` |
+| "No profile specified" | No default, no --profile | `mgws profiles set-default <name>` |
+| "Profile not authenticated" | Tokens missing/expired | `mgws profiles auth <name>` |
 | "Profile corrupted" | Missing meta.json | Remove + re-add the profile |
-| "Invalid grant" | OAuth revoked externally | `gwcli profiles auth <name>` |
+| "Invalid grant" | OAuth revoked externally | `mgws profiles auth <name>` |

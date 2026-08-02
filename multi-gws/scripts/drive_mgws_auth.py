@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""Capture the Google OAuth URL that `gwcli profiles auth <name>` prints, and
+"""Capture the Google OAuth URL that `mgws profiles auth <name>` prints, and
 hold the process open until the localhost callback completes.
 
-STATUS (current gwcli): this script is now an OPTIONAL convenience, not a
-requirement. `gwcli profiles auth` resolves the profile's stored scopes and
+STATUS (current mgws): this script is now an OPTIONAL convenience, not a
+requirement. `mgws profiles auth` resolves the profile's stored scopes and
 passes them to gws as `--services`, which skips gws's interactive scope
 picker entirely — so the carriage-return "Confirm the picker" logic below is
 a no-op for any scoped profile (it only ever fires if gws is somehow launched
-with no services on a live TTY). gwcli also auto-launches the OS default
+with no services on a live TTY). mgws also auto-launches the OS default
 browser on the detected URL; in an agent/headless context that OS tab is a
 dead window — ignore it and route the captured URL into your shared browser.
-A plain `gwcli profiles auth <name>` with stdout capture achieves the same
+A plain `mgws profiles auth <name>` with stdout capture achieves the same
 hand-off; use this wrapper only for the tagged `[driver] URL_CAPTURED ` line
 and the fixed 10-minute deadline.
 
@@ -19,11 +19,11 @@ zero human keystrokes on the terminal side, so the human only has to click in
 the browser.
 
 Usage:
-    drive_gwcli_auth.py <profile_name>
+    drive_mgws_auth.py <profile_name>
 
 Behavior:
-    1. Spawns gwcli in a fresh PTY with a sane window size (Ink/ratatui won't
-       render the picker without one — that's why a naive `gwcli profiles auth`
+    1. Spawns mgws in a fresh PTY with a sane window size (Ink/ratatui won't
+       render the picker without one — that's why a naive `mgws profiles auth`
        inside a non-TTY agent shell hangs silently).
     2. Waits for the scope-picker prompt by detecting "Confirm" + "Cancel"
        in the ANSI-stripped output (the raw bytes have escape codes splitting
@@ -50,7 +50,7 @@ Pitfalls discovered the hard way:
   - The match-then-evaluate logic must run on EVERY tick of the select loop,
     not only when select() returned data. Otherwise a "wait 0.8s then send CR"
     timer never fires after the TUI goes idle (no new bytes → no re-eval).
-  - When the gwcli node wrapper exits after launching gws, it can close its
+  - When the mgws node wrapper exits after launching gws, it can close its
     stdout pipe and the PTY master sees EOF — but the gws subprocess is still
     listening for the OAuth callback on its own port. Don't bail on first
     empty read; check whether the child is actually reaped (`waitpid WNOHANG`)
@@ -58,13 +58,13 @@ Pitfalls discovered the hard way:
     second profile in our session to exit cleanly without writing creds.
 
 Install:
-    cp <skill-dir>/scripts/drive_gwcli_auth.py ~/.local/bin/
-    chmod +x ~/.local/bin/drive_gwcli_auth.py
+    cp <skill-dir>/scripts/drive_mgws_auth.py ~/.local/bin/
+    chmod +x ~/.local/bin/drive_mgws_auth.py
 """
 import os, pty, sys, select, re, time, fcntl, termios, struct
 
 if len(sys.argv) != 2:
-    print("usage: drive_gwcli_auth.py <profile_name>", file=sys.stderr)
+    print("usage: drive_mgws_auth.py <profile_name>", file=sys.stderr)
     sys.exit(2)
 
 profile = sys.argv[1]
@@ -74,7 +74,7 @@ if pid == 0:
     os.environ.setdefault("TERM", "xterm-256color")
     os.environ.setdefault("COLUMNS", "200")
     os.environ.setdefault("LINES", "50")
-    os.execvp("gwcli", ["gwcli", "profiles", "auth", profile])
+    os.execvp("mgws", ["mgws", "profiles", "auth", profile])
 
 # parent: set window size on the pty so Ink renders the picker
 try:

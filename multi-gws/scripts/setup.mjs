@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * Setup script — installs gwcli and gws dependencies.
+ * Setup script — installs mgws and gws dependencies.
  * Cross-platform (Windows, macOS, Linux). Idempotent.
  *
  * Actions:
  * 1. Verify Node.js >= 18
  * 2. Install @googleworkspace/cli (gws) globally if missing
- * 3. Install multi-gws-cli (gwcli) globally if missing
+ * 3. Install multi-gws (mgws) globally if missing
  * 4. Create config directory structure
  * 5. Report status as JSON
  */
@@ -60,17 +60,17 @@ step('install-gws', () => {
   }
 });
 
-// Step 3: Install gwcli globally
-step('install-gwcli', () => {
+// Step 3: Install mgws globally
+step('install-mgws', () => {
   const shellOpt = IS_WIN ? { shell: true } : {};
   try {
-    execSync('gwcli --version', { encoding: 'utf-8', timeout: 10000, stdio: 'pipe', ...shellOpt });
+    execSync('mgws --version', { encoding: 'utf-8', timeout: 10000, stdio: 'pipe', ...shellOpt });
     return 'already installed';
   } catch {
-    log('  Installing multi-gws-cli globally from GitHub...');
+    log('  Installing multi-gws globally from GitHub...');
     // Not on the npm registry yet — install directly from the GitHub repo.
-    // npm will clone, run `prepare` (tsc) to build dist/, then link the gwcli bin.
-    execSync('npm install -g github:dewdad/multi-gws-cli', { stdio: 'pipe', timeout: 180000, ...shellOpt });
+    // npm will clone, run `prepare` (tsc) to build dist/, then link the mgws bin.
+    execSync('npm install -g github:dewdad/multi-gws', { stdio: 'pipe', timeout: 180000, ...shellOpt });
     return 'installed';
   }
 });
@@ -78,8 +78,8 @@ step('install-gwcli', () => {
 // Step 4: Create config directory
 step('config-dir', () => {
   const configRoot = IS_WIN
-    ? join(process.env.APPDATA || join(homedir(), 'AppData', 'Roaming'), 'gwcli')
-    : join(homedir(), '.config', 'gwcli');
+    ? join(process.env.APPDATA || join(homedir(), 'AppData', 'Roaming'), 'mgws')
+    : join(homedir(), '.config', 'mgws');
   const profilesDir = join(configRoot, 'profiles');
 
   if (!existsSync(configRoot)) mkdirSync(configRoot, { recursive: true });

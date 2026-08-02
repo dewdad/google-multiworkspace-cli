@@ -2,7 +2,7 @@ import { addProfile, removeProfile, refreshProfileEmail } from '../profiles/inde
 import { getGlobalConfig } from '../profiles/config.js';
 import { DEFAULT_SERVICES, FULL_ACCESS_SENTINEL } from '../profiles/scopes.js';
 import { runGwsAuthLogin } from '../gws/runner.js';
-import { GwcliError } from '../types/index.js';
+import { MgwsError } from '../types/index.js';
 
 // ─── Scope Resolution ──────────────────────────────────────────────────────
 
@@ -56,7 +56,7 @@ export interface AddAndAuthResult {
  * retries. Shared by `profiles add`, `init`, and `profiles rescope`.
  *
  * On auth failure this removes the scaffolded profile and throws
- * `GwcliError('AUTH_FAILED')` — callers surface the message + suggestion.
+ * `MgwsError('AUTH_FAILED')` — callers surface the message + suggestion.
  */
 export async function addAndAuthProfile(name: string, opts: AddAndAuthOptions): Promise<AddAndAuthResult> {
   addProfile(name, {
@@ -86,16 +86,16 @@ export async function addAndAuthProfile(name: string, opts: AddAndAuthOptions): 
     try {
       removeProfile(name);
     } catch {
-      throw new GwcliError(
+      throw new MgwsError(
         `Authentication failed for profile '${name}', and automatic rollback failed.`,
         'AUTH_FAILED',
-        `Clean up manually: gwcli profiles remove ${name} --force`
+        `Clean up manually: mgws profiles remove ${name} --force`
       );
     }
-    throw new GwcliError(
+    throw new MgwsError(
       `Authentication failed for profile '${name}' (rolled back).`,
       'AUTH_FAILED',
-      `Re-run: gwcli profiles add ${name}`
+      `Re-run: mgws profiles add ${name}`
     );
   }
 

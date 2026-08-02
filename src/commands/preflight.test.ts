@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { GwcliError } from '../types/index.js';
+import { MgwsError } from '../types/index.js';
 
 // Mock the dependencies BEFORE importing the SUT
 vi.mock('../gws/binary.js', () => ({
@@ -42,7 +42,7 @@ describe('runPreflight', () => {
 
   it('exits GWS_MISSING (63) when gws binary cannot be found', async () => {
     vi.mocked(findGwsBinary).mockImplementation(() => {
-      throw new GwcliError('Cannot find gws binary', 'GWS_NOT_FOUND', 'install it');
+      throw new MgwsError('Cannot find gws binary', 'GWS_NOT_FOUND', 'install it');
     });
     vi.mocked(listProfileNames).mockReturnValue(['personal']);
 
@@ -76,7 +76,7 @@ describe('runPreflight', () => {
     expect(payload).toEqual({
       ok: false,
       error: 'no_profiles',
-      fix: 'gwcli init <name>',
+      fix: 'mgws init <name>',
     });
   });
 
@@ -89,9 +89,9 @@ describe('runPreflight', () => {
     expect(payload).toEqual({ ok: true, profileCount: 3 });
   });
 
-  it('emits gws_missing payload with code from GwcliError when --json is set', async () => {
+  it('emits gws_missing payload with code from MgwsError when --json is set', async () => {
     vi.mocked(findGwsBinary).mockImplementation(() => {
-      throw new GwcliError('not found', 'GWS_NOT_FOUND', 'install');
+      throw new MgwsError('not found', 'GWS_NOT_FOUND', 'install');
     });
 
     await expect(runPreflight({ json: true })).rejects.toThrow('__exit_63__');
@@ -103,7 +103,7 @@ describe('runPreflight', () => {
     });
   });
 
-  it('rethrows non-GwcliError exceptions from findGwsBinary', async () => {
+  it('rethrows non-MgwsError exceptions from findGwsBinary', async () => {
     const surprise = new Error('unexpected');
     vi.mocked(findGwsBinary).mockImplementation(() => {
       throw surprise;

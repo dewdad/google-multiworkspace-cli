@@ -3,7 +3,7 @@ import { join, resolve } from 'path';
 import { getProfileDir, getProfileGwsDir, getProfileMeta, saveProfileMeta, PROFILES_DIR } from '../profiles/config.js';
 import { runGwsAuthLogin } from '../gws/runner.js';
 import { findGwsBinary } from '../gws/binary.js';
-import { GwcliError, type ProfileMeta } from '../types/index.js';
+import { MgwsError, type ProfileMeta } from '../types/index.js';
 import { DEFAULT_SERVICES } from '../profiles/scopes.js';
 
 interface MigrateOptions {
@@ -72,7 +72,7 @@ async function migrateProfile(name: string, options: MigrateOptions): Promise<vo
   // Need client secret to proceed
   if (!options.client && options.auth !== false) {
     console.error(`    ✗ Migration requires --client <path> or --no-auth`);
-    console.error(`      Run: gwcli migrate --profile ${name} --client ~/path/to/client_secret.json`);
+    console.error(`      Run: mgws migrate --profile ${name} --client ~/path/to/client_secret.json`);
     return;
   }
 
@@ -83,7 +83,7 @@ async function migrateProfile(name: string, options: MigrateOptions): Promise<vo
   if (options.client) {
     const clientPath = resolve(options.client);
     if (!existsSync(clientPath)) {
-      throw new GwcliError(
+      throw new MgwsError(
         `Client secret file not found: ${clientPath}`,
         'CLIENT_SECRET_NOT_FOUND'
       );
@@ -112,9 +112,9 @@ async function migrateProfile(name: string, options: MigrateOptions): Promise<vo
     if (result.exitCode === 0) {
       console.log(`    ✓ '${name}' migrated and authenticated`);
     } else {
-      console.error(`    ⚠ Auth failed. Run later: gwcli profiles auth ${name}`);
+      console.error(`    ⚠ Auth failed. Run later: mgws profiles auth ${name}`);
     }
   } else {
-    console.log(`    ✓ '${name}' migrated (auth skipped). Run: gwcli profiles auth ${name}`);
+    console.log(`    ✓ '${name}' migrated (auth skipped). Run: mgws profiles auth ${name}`);
   }
 }

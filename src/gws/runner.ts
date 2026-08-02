@@ -115,7 +115,7 @@ export function execGwsPassthrough(profileName: string, gwsArgs: string[]): neve
     // Translate known exit codes to helpful messages on stderr
     const errorMsg = translateGwsError(exitCode);
     if (errorMsg) {
-      process.stderr.write(`\ngwcli: ${errorMsg}\n`);
+      process.stderr.write(`\nmgws: ${errorMsg}\n`);
     }
   }
 
@@ -154,13 +154,13 @@ export interface RunGwsAuthLoginOptions {
    * failure for multi-account setups.
    *
    * Set to `false` to use the user's normal browser session (same UX as
-   * gwcli ≤ 2.1.0).
+   * mgws ≤ 2.1.0).
    */
   incognito?: boolean;
   /**
    * Auto-launch the OS default browser on the detected OAuth URL. Default: true.
    * Set false (via `--no-open`) for headless/agent/CI runs where no controllable
-   * OS browser session exists — gwcli still tees the URL to the terminal so the
+   * OS browser session exists — mgws still tees the URL to the terminal so the
    * caller can route it into its own browser.
    */
   autoOpen?: boolean;
@@ -171,7 +171,7 @@ export interface RunGwsAuthLoginOptions {
    *
    * ⚠ This will exceed Google's ~25-scope limit for unverified (testing-mode)
    * OAuth apps and fail consent — intended for verified apps / Workspace
-   * accounts. See `skill/references/profiles.md`.
+   * accounts. See `multi-gws/references/profiles.md`.
    */
   fullAccess?: boolean;
 }
@@ -242,7 +242,7 @@ export function runGwsAuthLogin(
       urlOpened = true;
       if (!autoOpen) {
         process.stderr.write(
-          `gwcli: --no-open set; not launching a browser. Open this URL yourself: ${match[1]}\n`
+          `mgws: --no-open set; not launching a browser. Open this URL yourself: ${match[1]}\n`
         );
         return true;
       }
@@ -283,7 +283,7 @@ export function runGwsAuthLogin(
     child.stderr?.on('data', (c: Buffer) => handleChunk(c, process.stderr));
 
     child.once('error', (err) => {
-      process.stderr.write(`gwcli: failed to spawn gws: ${err.message}\n`);
+      process.stderr.write(`mgws: failed to spawn gws: ${err.message}\n`);
       resolve({ exitCode: 1 });
     });
 

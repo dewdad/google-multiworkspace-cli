@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { GwcliError } from '../types/index.js';
+import { MgwsError } from '../types/index.js';
 
 vi.mock('../profiles/resolver.js', () => ({
   resolveProfile: vi.fn(),
@@ -49,22 +49,22 @@ describe('runAgenda', () => {
   it('rejects non-positive days with INVALID_AGENDA_DAYS', () => {
     expect(() =>
       runAgenda({ days: 0, calendarId: 'primary', maxResults: 10 })
-    ).toThrow(GwcliError);
+    ).toThrow(MgwsError);
     expect(() =>
       runAgenda({ days: -1, calendarId: 'primary', maxResults: 10 })
     ).toThrow(/Invalid --days value/);
     expect(() =>
       runAgenda({ days: NaN, calendarId: 'primary', maxResults: 10 })
-    ).toThrow(GwcliError);
+    ).toThrow(MgwsError);
   });
 
   it('rejects invalid maxResults with INVALID_AGENDA_MAX', () => {
     expect(() =>
       runAgenda({ days: 7, calendarId: 'primary', maxResults: NaN })
-    ).toThrow(GwcliError);
+    ).toThrow(MgwsError);
     expect(() =>
       runAgenda({ days: 7, calendarId: 'primary', maxResults: 0 })
-    ).toThrow(GwcliError);
+    ).toThrow(MgwsError);
     expect(() =>
       runAgenda({ days: 7, calendarId: 'primary', maxResults: -5 })
     ).toThrow(/Invalid --max value/);

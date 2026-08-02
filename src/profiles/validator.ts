@@ -1,4 +1,4 @@
-import { GwcliError } from '../types/index.js';
+import { MgwsError } from '../types/index.js';
 
 const PROFILE_NAME_REGEX = /^[a-z][a-z0-9-]{0,62}$/;
 
@@ -16,19 +16,19 @@ const RESERVED_NAMES = new Set([
 
 /**
  * Validate a profile name for safety and conventions.
- * Throws GwcliError with actionable suggestion on invalid input.
+ * Throws MgwsError with actionable suggestion on invalid input.
  */
 export function validateProfileName(name: string): void {
   if (!name) {
-    throw new GwcliError(
+    throw new MgwsError(
       'Profile name cannot be empty.',
       'INVALID_PROFILE_NAME',
-      'Provide a name like: gwcli profiles add my-profile --client <path>'
+      'Provide a name like: mgws profiles add my-profile --client <path>'
     );
   }
 
   if (RESERVED_NAMES.has(name)) {
-    throw new GwcliError(
+    throw new MgwsError(
       `'${name}' is a reserved name and cannot be used as a profile name.`,
       'RESERVED_PROFILE_NAME',
       `Choose a different name. Reserved: ${[...RESERVED_NAMES].join(', ')}`
@@ -40,7 +40,7 @@ export function validateProfileName(name: string): void {
     const suggestion = sanitized && sanitized !== name && PROFILE_NAME_REGEX.test(sanitized)
       ? `Try '${sanitized}' instead. Rules: start with lowercase letter, [a-z0-9-]{1,63}.`
       : 'Profile names must: start with a lowercase letter, contain only lowercase letters/digits/hyphens, and be 1-63 characters.';
-    throw new GwcliError(
+    throw new MgwsError(
       `Invalid profile name '${name}'.`,
       'INVALID_PROFILE_NAME',
       suggestion
@@ -49,7 +49,7 @@ export function validateProfileName(name: string): void {
 
   // Path traversal check (defense in depth)
   if (name.includes('..') || name.includes('/') || name.includes('\\')) {
-    throw new GwcliError(
+    throw new MgwsError(
       `Profile name '${name}' contains unsafe characters.`,
       'UNSAFE_PROFILE_NAME',
       'Profile names cannot contain path separators or "..".'

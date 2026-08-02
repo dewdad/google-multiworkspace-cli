@@ -12,15 +12,15 @@ import { runSetup } from './commands/setup.js';
 import { runInit } from './commands/init.js';
 import { runAgenda } from './commands/agenda.js';
 import { tryTranslateCompat } from './compat/translations.js';
-import { GwcliError } from './types/index.js';
-import { GWCLI_VERSION } from './version.js';
+import { MgwsError } from './types/index.js';
+import { MGWS_VERSION } from './version.js';
 
 const program = new Command();
 
 program
-  .name('gwcli')
+  .name('mgws')
   .description('Multi-profile Google Workspace CLI — orchestration layer over gws')
-  .version(GWCLI_VERSION)
+  .version(MGWS_VERSION)
   .option('-p, --profile <name>', 'Select profile for this invocation')
   .option('-f, --format <fmt>', 'Output format: json, table, yaml, csv')
   .option('-v, --verbose', 'Show debug info (profile resolution, gws command)')
@@ -50,10 +50,10 @@ program
 
 program
   .command('version-info')
-  .description('Show version info for gwcli and gws')
+  .description('Show version info for mgws and gws')
   .action(() => {
     const gwsInfo = findGwsBinary();
-    console.log(`gwcli  ${GWCLI_VERSION}`);
+    console.log(`mgws  ${MGWS_VERSION}`);
     console.log(`gws    ${gwsInfo.version}  (${gwsInfo.path})`);
   });
 
@@ -102,7 +102,7 @@ program
     });
   });
 
-// `gwcli agenda` — native, profile-aware shortcut for "what's on my calendar?"
+// `mgws agenda` — native, profile-aware shortcut for "what's on my calendar?"
 // Implemented natively (composes events.list with timeMin/timeMax) so it works
 // regardless of whether the underlying gws supports a `+agenda` shortcut.
 program
@@ -125,7 +125,7 @@ program
 
 // ─── Passthrough: Everything else goes to gws ────────────────────────────────
 
-// ─── Arg Parser (extract gwcli flags, leave rest for gws) ────────────────────
+// ─── Arg Parser (extract mgws flags, leave rest for gws) ────────────────────
 
 interface ParsedArgs {
   profileFlag?: string;
@@ -146,7 +146,7 @@ const NATIVE_COMMANDS = new Set([
   'help',
 ]);
 
-function parseGwcliArgs(rawArgs: string[]): ParsedArgs {
+function parseMgwsArgs(rawArgs: string[]): ParsedArgs {
   let profileFlag: string | undefined;
   let formatFlag: string | undefined;
   let verbose = false;
@@ -162,7 +162,7 @@ function parseGwcliArgs(rawArgs: string[]): ParsedArgs {
       break;
     }
 
-    // gwcli global flags
+    // mgws global flags
     if ((arg === '--profile' || arg === '-p') && i + 1 < rawArgs.length) {
       profileFlag = rawArgs[++i];
     } else if ((arg === '--format' || arg === '-f') && i + 1 < rawArgs.length) {
@@ -182,7 +182,7 @@ function parseGwcliArgs(rawArgs: string[]): ParsedArgs {
 }
 
 function handlePassthrough(rawArgs: string[]): void {
-  const { profileFlag, formatFlag, verbose, gwsArgs } = parseGwcliArgs(rawArgs);
+  const { profileFlag, formatFlag, verbose, gwsArgs } = parseMgwsArgs(rawArgs);
 
   if (gwsArgs.length === 0) {
     program.help();
@@ -193,9 +193,9 @@ function handlePassthrough(rawArgs: string[]): void {
     const profile = resolveProfile(profileFlag);
 
     if (verbose) {
-      process.stderr.write(`[gwcli] profile: ${profile.name}\n`);
-      process.stderr.write(`[gwcli] gws config dir: ${profile.gwsConfigDir}\n`);
-      process.stderr.write(`[gwcli] gws args: ${gwsArgs.join(' ')}\n`);
+      process.stderr.write(`[mgws] profile: ${profile.name}\n`);
+      process.stderr.write(`[mgws] gws config dir: ${profile.gwsConfigDir}\n`);
+      process.stderr.write(`[mgws] gws args: ${gwsArgs.join(' ')}\n`);
     }
 
     // Try compat translation for v1 command syntax
@@ -217,7 +217,7 @@ function handlePassthrough(rawArgs: string[]): void {
       }
     }
 
-    // Inject --format into gws args if specified by gwcli and not already in gws args
+    // Inject --format into gws args if specified by mgws and not already in gws args
     const finalGwsArgs = [...effectiveArgs];
     if (formatFlag && !effectiveArgs.some(a => a === '--format' || a === '-f' || a.startsWith('--format=') || a.startsWith('-f='))) {
       finalGwsArgs.push('--format', formatFlag);
@@ -225,7 +225,7 @@ function handlePassthrough(rawArgs: string[]): void {
 
     execGwsPassthrough(profile.name, finalGwsArgs);
   } catch (err) {
-    if (err instanceof GwcliError) {
+    if (err instanceof MgwsError) {
       process.stderr.write(`Error: ${err.message}\n`);
       if (err.suggestion) {
         process.stderr.write(`${err.suggestion}\n`);
@@ -238,7 +238,7 @@ function handlePassthrough(rawArgs: string[]): void {
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
-// Help/version flags are gwcli-native — route them to Commander, not gws.
+// Help/version flags are mgws-native — route them to Commander, not gws.
 const TOP_LEVEL_HELP_FLAGS = new Set(['-h', '--help', '-V', '--version']);
 const rawArgvSlice = process.argv.slice(2);
 const wantsTopLevelHelp =
@@ -271,7 +271,7 @@ const isNativeCommand =
 if (isNativeCommand) {
   // Let Commander handle native commands normally
   program.parseAsync(process.argv).catch((error) => {
-    if (error instanceof GwcliError) {
+    if (error instanceof MgwsError) {
       process.stderr.write(`Error: ${error.message}\n`);
       if (error.suggestion) {
         process.stderr.write(`${error.suggestion}\n`);

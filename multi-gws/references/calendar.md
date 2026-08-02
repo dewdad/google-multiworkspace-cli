@@ -3,29 +3,29 @@
 ## Quick Commands (shortcuts)
 
 ```bash
-# Native gwcli shortcut (recommended — works regardless of gws version)
-gwcli agenda --days 7
-gwcli agenda --days 1                              # Today only
-gwcli --profile work agenda --days 3               # Work calendar (next 3 days)
-gwcli --profile work agenda --calendar team@company.com --days 7
+# Native mgws shortcut (recommended — works regardless of gws version)
+mgws agenda --days 7
+mgws agenda --days 1                              # Today only
+mgws --profile work agenda --days 3               # Work calendar (next 3 days)
+mgws --profile work agenda --calendar team@company.com --days 7
 ```
 
-> The native `gwcli agenda` command composes a `calendar.events.list` call internally; it does **not** rely on a gws-side `+agenda` shortcut and works on every supported gws version.
+> The native `mgws agenda` command composes a `calendar.events.list` call internally; it does **not** rely on a gws-side `+agenda` shortcut and works on every supported gws version.
 
 ## API Passthrough Commands
 
 ```bash
-gwcli [--profile <name>] calendar <resource> <method> --params '<json>' [--json '<request-body>']
+mgws [--profile <name>] calendar <resource> <method> --params '<json>' [--json '<request-body>']
 ```
 
 ### List Calendars
 ```bash
-gwcli calendar calendarList list --params '{}'
+mgws calendar calendarList list --params '{}'
 ```
 
 ### List Events
 ```bash
-gwcli calendar events list --params '{
+mgws calendar events list --params '{
   "calendarId": "primary",
   "timeMin": "2024-01-01T00:00:00Z",
   "timeMax": "2024-01-31T23:59:59Z",
@@ -44,12 +44,12 @@ Key params:
 
 ### Get a Single Event
 ```bash
-gwcli calendar events get --params '{"calendarId":"primary","eventId":"<event-id>"}'
+mgws calendar events get --params '{"calendarId":"primary","eventId":"<event-id>"}'
 ```
 
 ### Create an Event
 ```bash
-gwcli calendar events insert --params '{"calendarId":"primary"}' --json '{
+mgws calendar events insert --params '{"calendarId":"primary"}' --json '{
   "summary": "Team Standup",
   "description": "Daily sync",
   "start": {"dateTime": "2024-06-15T09:00:00-07:00", "timeZone": "America/Los_Angeles"},
@@ -61,7 +61,7 @@ gwcli calendar events insert --params '{"calendarId":"primary"}' --json '{
 
 ### Update an Event
 ```bash
-gwcli calendar events patch --params '{"calendarId":"primary","eventId":"<id>"}' --json '{
+mgws calendar events patch --params '{"calendarId":"primary","eventId":"<id>"}' --json '{
   "summary": "Updated Title",
   "start": {"dateTime": "2024-06-15T10:00:00-07:00"}
 }'
@@ -69,12 +69,12 @@ gwcli calendar events patch --params '{"calendarId":"primary","eventId":"<id>"}'
 
 ### Delete an Event
 ```bash
-gwcli calendar events delete --params '{"calendarId":"primary","eventId":"<id>"}'
+mgws calendar events delete --params '{"calendarId":"primary","eventId":"<id>"}'
 ```
 
 ### Quick Add (natural language)
 ```bash
-gwcli calendar events quickAdd --params '{"calendarId":"primary","text":"Lunch with Alice tomorrow at noon"}'
+mgws calendar events quickAdd --params '{"calendarId":"primary","text":"Lunch with Alice tomorrow at noon"}'
 ```
 
 ## All-Day Events
@@ -99,12 +99,12 @@ Use `date` instead of `dateTime`:
 
 ### "What's on my calendar today?"
 ```bash
-gwcli agenda --days 1
+mgws agenda --days 1
 ```
 
 ### "Am I free at 3pm tomorrow?"
 ```bash
-gwcli calendar events list --params '{
+mgws calendar events list --params '{
   "calendarId": "primary",
   "timeMin": "2024-06-16T15:00:00Z",
   "timeMax": "2024-06-16T16:00:00Z",
@@ -115,5 +115,5 @@ Empty `items[]` = free.
 
 ### "Schedule a meeting"
 ```bash
-gwcli calendar events insert --params '{"calendarId":"primary"}' --json '{"summary":"...","start":{"dateTime":"..."},"end":{"dateTime":"..."}}'
+mgws calendar events insert --params '{"calendarId":"primary"}' --json '{"summary":"...","start":{"dateTime":"..."},"end":{"dateTime":"..."}}'
 ```

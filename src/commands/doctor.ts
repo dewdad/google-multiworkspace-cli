@@ -1,7 +1,7 @@
 import { checkGwsBinary } from '../gws/binary.js';
 import { listAllProfiles } from '../profiles/index.js';
 import { CONFIG_ROOT } from '../profiles/config.js';
-import { GWCLI_VERSION } from '../version.js';
+import { MGWS_VERSION } from '../version.js';
 import type { DoctorCheck } from '../types/index.js';
 
 export async function runDoctor(): Promise<void> {
@@ -38,7 +38,7 @@ export async function runDoctor(): Promise<void> {
       name: 'Profiles',
       status: 'warn',
       message: 'No profiles configured',
-      suggestion: 'Create one: gwcli init <name>',
+      suggestion: 'Create one: mgws init <name>',
     });
   } else {
     for (const profile of profiles) {
@@ -54,14 +54,14 @@ export async function runDoctor(): Promise<void> {
           name: `Profile: ${profile.name}${marker}`,
           status: 'error',
           message: 'Not authenticated',
-          suggestion: `Run: gwcli profiles auth ${profile.name}`,
+          suggestion: `Run: mgws profiles auth ${profile.name}`,
         });
       }
     }
   }
 
   // Print results
-  console.log(`gwcli  ${GWCLI_VERSION}`);
+  console.log(`mgws  ${MGWS_VERSION}`);
   if (gwsInfo) {
     console.log(`gws    v${gwsInfo.version}`);
   }

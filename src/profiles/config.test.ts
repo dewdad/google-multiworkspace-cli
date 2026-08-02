@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdirSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { GwcliError } from '../types/index.js';
+import { MgwsError } from '../types/index.js';
 
-// Set GWCLI_CONFIG_DIR before importing config module
-const TEST_CONFIG_DIR = join(process.env['TEMP'] ?? '/tmp', 'gwcli-test-' + Date.now());
-process.env['GWCLI_CONFIG_DIR'] = TEST_CONFIG_DIR;
+// Set MGWS_CONFIG_DIR before importing config module
+const TEST_CONFIG_DIR = join(process.env['TEMP'] ?? '/tmp', 'mgws-test-' + Date.now());
+process.env['MGWS_CONFIG_DIR'] = TEST_CONFIG_DIR;
 
 const { getGlobalConfig, saveGlobalConfig, getProfileMeta, saveProfileMeta, listProfileNames, profileExists, getProfileGwsDir, ensureConfigDir } = await import('./config.js');
 
@@ -36,10 +36,10 @@ describe('config module', () => {
       expect(loaded.defaultProfile).toBe('work');
     });
 
-    it('throws GwcliError on malformed config.json', () => {
+    it('throws MgwsError on malformed config.json', () => {
       ensureConfigDir();
       writeFileSync(join(TEST_CONFIG_DIR, 'config.json'), '{ not valid json }');
-      expect(() => getGlobalConfig()).toThrow(GwcliError);
+      expect(() => getGlobalConfig()).toThrow(MgwsError);
     });
 
     it('deep-merges partial settings preserving unspecified defaults', () => {
@@ -64,12 +64,12 @@ describe('config module', () => {
       expect(getProfileMeta('nonexistent')).toBeNull();
     });
 
-    it('throws GwcliError on malformed meta.json', () => {
+    it('throws MgwsError on malformed meta.json', () => {
       ensureConfigDir();
       const profileDir = join(TEST_CONFIG_DIR, 'profiles', 'broken');
       mkdirSync(profileDir, { recursive: true });
       writeFileSync(join(profileDir, 'meta.json'), '{ not valid json }');
-      expect(() => getProfileMeta('broken')).toThrow(GwcliError);
+      expect(() => getProfileMeta('broken')).toThrow(MgwsError);
     });
 
     it('saves and loads profile metadata', () => {

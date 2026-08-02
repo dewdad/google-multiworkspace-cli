@@ -57,14 +57,14 @@ export interface ResolvedProfile {
 
 // ─── Error Types ─────────────────────────────────────────────────────────────
 
-export class GwcliError extends Error {
+export class MgwsError extends Error {
   constructor(
     message: string,
     public readonly code: string,
     public readonly suggestion?: string
   ) {
     super(message);
-    this.name = 'GwcliError';
+    this.name = 'MgwsError';
   }
 }
 

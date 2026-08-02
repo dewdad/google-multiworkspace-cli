@@ -3,7 +3,7 @@ import chalk from 'chalk';
 import type { OutputFormat } from '../types/index.js';
 
 /**
- * Generic table/JSON formatter for gwcli-native command output.
+ * Generic table/JSON formatter for mgws-native command output.
  * gws passthrough output is NOT processed by this — it goes directly via stdio: 'inherit'.
  */
 export function formatOutput(

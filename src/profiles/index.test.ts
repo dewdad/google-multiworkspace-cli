@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdirSync, rmSync, existsSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
-const TEST_CONFIG_DIR = join(process.env['TEMP'] ?? '/tmp', 'gwcli-addprofile-test-' + Date.now());
-process.env['GWCLI_CONFIG_DIR'] = TEST_CONFIG_DIR;
+const TEST_CONFIG_DIR = join(process.env['TEMP'] ?? '/tmp', 'mgws-addprofile-test-' + Date.now());
+process.env['MGWS_CONFIG_DIR'] = TEST_CONFIG_DIR;
 
 const { addProfile, removeProfile, renameProfile } = await import('./index.js');
 const { getProfileGwsDir, getProfileMeta } = await import('./config.js');
@@ -62,7 +62,7 @@ describe('removeProfile — name validation', () => {
     rmSync(TEST_CONFIG_DIR, { recursive: true, force: true });
   });
 
-  it('throws GwcliError for a traversal name and does not touch the filesystem', () => {
+  it('throws MgwsError for a traversal name and does not touch the filesystem', () => {
     // Given: clean profiles dir
     const profilesDir = join(TEST_CONFIG_DIR, 'profiles');
 
@@ -74,7 +74,7 @@ describe('removeProfile — name validation', () => {
       thrownErr = err;
     }
 
-    // Then: a GwcliError was thrown
+    // Then: a MgwsError was thrown
     expect(thrownErr).toBeDefined();
     expect((thrownErr as { code?: string }).code).toBeDefined();
 
@@ -93,7 +93,7 @@ describe('renameProfile — name validation', () => {
     rmSync(TEST_CONFIG_DIR, { recursive: true, force: true });
   });
 
-  it('throws GwcliError for a traversal oldName and does not touch the filesystem', () => {
+  it('throws MgwsError for a traversal oldName and does not touch the filesystem', () => {
     // Given: clean profiles dir
     const profilesDir = join(TEST_CONFIG_DIR, 'profiles');
 
@@ -105,7 +105,7 @@ describe('renameProfile — name validation', () => {
       thrownErr = err;
     }
 
-    // Then: a GwcliError was thrown
+    // Then: a MgwsError was thrown
     expect(thrownErr).toBeDefined();
     expect((thrownErr as { code?: string }).code).toBeDefined();
 
@@ -114,7 +114,7 @@ describe('renameProfile — name validation', () => {
     expect(existsSync(join(profilesDir, 'ok'))).toBe(false);
   });
 
-  it('throws GwcliError for a traversal newName and does not touch the filesystem', () => {
+  it('throws MgwsError for a traversal newName and does not touch the filesystem', () => {
     // Given: clean profiles dir
     const profilesDir = join(TEST_CONFIG_DIR, 'profiles');
 
@@ -126,7 +126,7 @@ describe('renameProfile — name validation', () => {
       thrownErr = err;
     }
 
-    // Then: a GwcliError was thrown
+    // Then: a MgwsError was thrown
     expect(thrownErr).toBeDefined();
     expect((thrownErr as { code?: string }).code).toBeDefined();
 

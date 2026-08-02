@@ -65,7 +65,7 @@ export async function runReauth(options: ReauthOptions = {}): Promise<void> {
     if (!fullAccess && (!scopes || scopes.length === 0)) {
       console.error(
         `Skipping '${profile.name}': no stored scopes. ` +
-        `Run: gwcli profiles auth ${profile.name} --scopes gmail,calendar,drive`
+        `Run: mgws profiles auth ${profile.name} --scopes gmail,calendar,drive`
       );
       failed++;
       continue;

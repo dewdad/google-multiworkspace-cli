@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * gwcli wrapper — resolves and executes gwcli.
+ * mgws wrapper — resolves and executes mgws.
  * Priority: global install → npx → local build (skill-relative).
  *
- * This wrapper exists so the skill can always point to `$SKILL_DIR/bin/gwcli.mjs`
+ * This wrapper exists so the skill can always point to `$SKILL_DIR/bin/mgws.mjs`
  * regardless of how the user installed the CLI.
  */
 import { execSync, spawnSync } from 'node:child_process';
@@ -16,14 +16,14 @@ const SKILL_DIR = dirname(__dirname);
 const args = process.argv.slice(2);
 const IS_WIN = process.platform === 'win32';
 
-// Strategy 1: Global gwcli
+// Strategy 1: Global mgws
 // On Windows, npm globals install as .cmd shims that require shell:true
 // to be invoked via execSync/spawnSync. Without the flag, the probe always
 // throws and we fall through to the slow npx path on every invocation.
 function tryGlobal() {
   try {
-    execSync('gwcli --version', { stdio: 'pipe', timeout: 5000, shell: IS_WIN });
-    return 'gwcli';
+    execSync('mgws --version', { stdio: 'pipe', timeout: 5000, shell: IS_WIN });
+    return 'mgws';
   } catch {
     return null;
   }
@@ -31,7 +31,7 @@ function tryGlobal() {
 
 // Strategy 2: Local build in skill's parent project
 function tryLocalBuild() {
-  // If installed via skillshare from this repo, dist/ might be alongside skill/
+  // If installed via skillshare from this repo, dist/ might be alongside multi-gws/
   const distIndex = join(SKILL_DIR, '..', 'dist', 'index.js');
   if (existsSync(distIndex)) {
     return `node ${distIndex}`;
@@ -44,15 +44,15 @@ function tryLocalBuild() {
 // build is available. The package is not on the npm registry yet (see Issue 1
 // in plans/install-and-bootstrap-fixes), so the install vector is the repo URL.
 function tryNpx() {
-  return 'npx --yes github:dewdad/multi-gws-cli';
+  return 'npx --yes github:dewdad/multi-gws';
 }
 
 const command = tryGlobal() || tryLocalBuild() || tryNpx();
 
-if (command === 'gwcli') {
+if (command === 'mgws') {
   // Direct spawn for global install. shell:true on Windows for .cmd shims;
   // on POSIX, avoid shell to prevent argument-quoting surprises.
-  const result = spawnSync('gwcli', args, { stdio: 'inherit', shell: IS_WIN });
+  const result = spawnSync('mgws', args, { stdio: 'inherit', shell: IS_WIN });
   process.exit(result.status ?? 1);
 } else if (command.startsWith('node ')) {
   // Local build

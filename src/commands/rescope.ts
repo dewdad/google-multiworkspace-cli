@@ -6,7 +6,7 @@ import { getProfileMeta, getProfileGwsDir, hasClientSecret } from '../profiles/c
 import { FULL_ACCESS_SENTINEL } from '../profiles/scopes.js';
 import { addAndAuthProfile, type ScopeSelection } from './onboard.js';
 import { findGwsBinary } from '../gws/binary.js';
-import { GwcliError } from '../types/index.js';
+import { MgwsError } from '../types/index.js';
 
 export interface RescopeOps {
   add?: string;
@@ -34,7 +34,7 @@ export function computeRescope(current: string[], ops: RescopeOps): ScopeSelecti
   }
 
   if (ops.set === undefined && !ops.add && !ops.remove) {
-    throw new GwcliError(
+    throw new MgwsError(
       'No scope changes requested.',
       'RESCOPE_NO_OPS',
       'Use --add, --remove, --set, or --full.'
@@ -51,7 +51,7 @@ export function computeRescope(current: string[], ops: RescopeOps): ScopeSelecti
 
   const scopes = [...result];
   if (scopes.length === 0) {
-    throw new GwcliError(
+    throw new MgwsError(
       'The resulting scope set is empty.',
       'RESCOPE_EMPTY',
       'Keep at least one service, or use --full for all scopes.'
@@ -79,10 +79,10 @@ export async function runRescope(name: string, options: RescopeOptions): Promise
 
   const meta = getProfileMeta(name);
   if (!meta) {
-    throw new GwcliError(
+    throw new MgwsError(
       `Profile '${name}' does not exist.`,
       'PROFILE_NOT_FOUND',
-      'List profiles: gwcli profiles list'
+      'List profiles: mgws profiles list'
     );
   }
 
@@ -93,7 +93,7 @@ export async function runRescope(name: string, options: RescopeOptions): Promise
   let preservedClient: string | undefined;
   if (hasClientSecret(name)) {
     const source = join(getProfileGwsDir(name), 'client_secret.json');
-    preservedClient = join(tmpdir(), `gwcli-rescope-${name}-${Date.now()}.json`);
+    preservedClient = join(tmpdir(), `mgws-rescope-${name}-${Date.now()}.json`);
     copyFileSync(source, preservedClient);
   }
 

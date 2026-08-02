@@ -1,6 +1,6 @@
 /**
  * Single source of truth for the service/scope vocabulary shared across the
- * profile commands. `gwcli`'s `--scopes` flag takes **service names** (not raw
+ * profile commands. `mgws`'s `--scopes` flag takes **service names** (not raw
  * OAuth scope URLs) and forwards them to `gws auth login --services <list>`,
  * which maps each service to its recommended OAuth scope set.
  */

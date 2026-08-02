@@ -8,7 +8,7 @@ import { formatOutput } from '../lib/output.js';
 import { addAndAuthProfile, resolveScopeList } from './onboard.js';
 import { runReauth } from './reauth.js';
 import { runRescope } from './rescope.js';
-import { GwcliError } from '../types/index.js';
+import { MgwsError } from '../types/index.js';
 
 export function registerProfilesCommands(program: Command): void {
   const profiles = program
@@ -25,7 +25,7 @@ export function registerProfilesCommands(program: Command): void {
       const entries = listAllProfiles();
       // Format resolution:
       //   1. explicit --format on the subcommand
-      //   2. global --format on gwcli
+      //   2. global --format on mgws
       //   3. auto: JSON if not TTY (piped/captured), table if interactive
       const format =
         options.format ??
@@ -37,7 +37,7 @@ export function registerProfilesCommands(program: Command): void {
           console.log('[]');
         } else {
           console.log('No profiles configured.');
-          console.log('Add a profile with: gwcli profiles add <name>');
+          console.log('Add a profile with: mgws profiles add <name>');
         }
         return;
       }
@@ -60,7 +60,7 @@ export function registerProfilesCommands(program: Command): void {
   profiles
     .command('add <name>')
     .description('Add a new profile')
-    .option('--client <path>', 'Path to a custom OAuth client credentials JSON file (optional — uses the built-in gwcli client if omitted)')
+    .option('--client <path>', 'Path to a custom OAuth client credentials JSON file (optional — uses the built-in mgws client if omitted)')
     .option('--scopes <list>', 'Comma-separated service names for scope picker', DEFAULT_SERVICES.join(','))
     .option('--full', 'Request ALL scopes (incl. Pub/Sub + Cloud Platform) via `gws auth login --full`. Overrides --scopes. WARNING: exceeds Google\'s ~25-scope limit for unverified/testing-mode OAuth apps and will fail consent there.')
     .option('--display-name <name>', 'Human-friendly display name')
@@ -105,13 +105,13 @@ export function registerProfilesCommands(program: Command): void {
             console.log(`Identity: ${result.email}`);
           }
         } else {
-          console.log(`Skipping auth. Run later: gwcli profiles auth ${name}`);
+          console.log(`Skipping auth. Run later: mgws profiles auth ${name}`);
         }
         if (result.isDefault) {
           console.log(`Set as the default profile.`);
         }
       } catch (err) {
-        if (err instanceof GwcliError) {
+        if (err instanceof MgwsError) {
           console.error(`Error: ${err.message}`);
           if (err.suggestion) console.error(err.suggestion);
         } else {
@@ -131,14 +131,14 @@ export function registerProfilesCommands(program: Command): void {
       try {
         if (!options.force) {
           console.error(`This will permanently delete profile '${name}' and its credentials.`);
-          console.error(`Re-run with --force to confirm: gwcli profiles remove ${name} --force`);
+          console.error(`Re-run with --force to confirm: mgws profiles remove ${name} --force`);
           process.exit(1);
         }
 
         removeProfile(name);
         console.log(`Profile '${name}' removed.`);
       } catch (err) {
-        if (err instanceof GwcliError) {
+        if (err instanceof MgwsError) {
           console.error(`Error: ${err.message}`);
           if (err.suggestion) console.error(err.suggestion);
         } else {
@@ -158,7 +158,7 @@ export function registerProfilesCommands(program: Command): void {
         renameProfile(oldName, newName);
         console.log(`Profile renamed: '${oldName}' → '${newName}'`);
       } catch (err) {
-        if (err instanceof GwcliError) {
+        if (err instanceof MgwsError) {
           console.error(`Error: ${err.message}`);
           if (err.suggestion) console.error(err.suggestion);
         } else {
@@ -178,7 +178,7 @@ export function registerProfilesCommands(program: Command): void {
         setDefaultProfile(name);
         console.log(`Default profile set to '${name}'.`);
       } catch (err) {
-        if (err instanceof GwcliError) {
+        if (err instanceof MgwsError) {
           console.error(`Error: ${err.message}`);
           if (err.suggestion) console.error(err.suggestion);
         } else {
@@ -230,10 +230,10 @@ export function registerProfilesCommands(program: Command): void {
         // with a clear remediation hint instead of silently deadlocking.
         // Full-access mode needs no scope list, so it is exempt.
         if (!fullAccess && (!scopes || scopes.length === 0) && !process.stdin.isTTY) {
-          throw new GwcliError(
+          throw new MgwsError(
             `Cannot authenticate profile '${name}' in a non-interactive environment without explicit scopes.`,
             'AUTH_NEEDS_SCOPES_NON_TTY',
-            `Re-run with --scopes, e.g.:\n  gwcli profiles auth ${name} --scopes gmail,calendar,drive,docs,sheets,tasks`
+            `Re-run with --scopes, e.g.:\n  mgws profiles auth ${name} --scopes gmail,calendar,drive,docs,sheets,tasks`
           );
         }
 
@@ -265,7 +265,7 @@ export function registerProfilesCommands(program: Command): void {
           process.exit(result.exitCode);
         }
       } catch (err) {
-        if (err instanceof GwcliError) {
+        if (err instanceof MgwsError) {
           console.error(`Error: ${err.message}`);
           if (err.suggestion) console.error(err.suggestion);
         } else {
@@ -341,7 +341,7 @@ export function registerProfilesCommands(program: Command): void {
           process.exit(2);
         }
       } catch (err) {
-        if (err instanceof GwcliError) {
+        if (err instanceof MgwsError) {
           console.error(`Error: ${err.message}`);
           if (err.suggestion) console.error(err.suggestion);
         } else {

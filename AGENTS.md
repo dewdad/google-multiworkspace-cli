@@ -3,20 +3,20 @@
 - DOX is highly performant AGENTS.md hierarchy installed here
 - Agent must follow DOX instructions across any edits
 
-## Project: multi-gws-cli (`gwcli`)
+## Project: multi-gws (`mgws`)
 
-Multi-profile orchestration layer over the official `gws` CLI (`@googleworkspace/cli`). Adds named, credential-isolated profiles (AWS-CLI style) and AI-agent-friendly defaults. **`gwcli` is a wrapper, not a reimplementation** — it never calls Google APIs directly; it resolves a profile and spawns `gws` with that profile's config dir. All service surface (Gmail/Calendar/Drive/Docs/Sheets/Keep/Tasks/…) comes from `gws`.
+Multi-profile orchestration layer over the official `gws` CLI (`@googleworkspace/cli`). Adds named, credential-isolated profiles (AWS-CLI style) and AI-agent-friendly defaults. **`mgws` is a wrapper, not a reimplementation** — it never calls Google APIs directly; it resolves a profile and spawns `gws` with that profile's config dir. All service surface (Gmail/Calendar/Drive/Docs/Sheets/Keep/Tasks/…) comes from `gws`.
 
 - **Runtime:** Node.js ≥18, TypeScript ESM. Binary entrypoint `dist/index.js` (built from `src/index.ts`).
-- **External dependency:** `gws` is a global CLI binary, not an npm dependency. `gwcli setup` installs it; `gwcli doctor`/`preflight` verify it.
-- **Two command surfaces:** native commands (handled by gwcli) vs. passthrough (forwarded to gws). See `src/AGENTS.md`.
-- **Ships an AI skill** at `skill/` (bundled in the npm package) for agent consumption.
+- **External dependency:** `gws` is a global CLI binary, not an npm dependency. `mgws setup` installs it; `mgws doctor`/`preflight` verify it.
+- **Two command surfaces:** native commands (handled by mgws) vs. passthrough (forwarded to gws). See `src/AGENTS.md`.
+- **Ships an AI skill** at `multi-gws/` (bundled in the npm package) for agent consumption.
 
 ### Project-wide rules
 
 - ESM `.js` import extensions on all relative imports (see `src/AGENTS.md`). Strict types, no `any`/`@ts-ignore` suppression.
-- `GWCLI_VERSION` (`src/version.ts`) ⇔ `package.json` `version` ⇔ `skill/SKILL.md` `metadata.version` must stay in lockstep.
-- User-facing failures throw `GwcliError(message, code, suggestion?)`.
+- `MGWS_VERSION` (`src/version.ts`) ⇔ `package.json` `version` ⇔ `multi-gws/SKILL.md` `metadata.version` must stay in lockstep.
+- User-facing failures throw `MgwsError(message, code, suggestion?)`.
 
 ### Verification
 
@@ -102,7 +102,7 @@ When the user requests a durable behavior change, record it here or in the relev
 - `src/AGENTS.md` — TypeScript source contract: ESM `.js` imports, strict types, native-vs-passthrough routing, build/test/lint toolchain. Directly owns `index.ts`, `types/`, `lib/`, `compat/`, `version.ts`.
   - `src/profiles/AGENTS.md` — profile store, config path layout, resolution priority, scope vocabulary, name validation.
   - `src/gws/AGENTS.md` — external `gws` subprocess orchestration: binary discovery, env injection, auth login + OAuth browser launch, token-cache invalidation, error translation.
-  - `src/commands/AGENTS.md` — native gwcli commands (profiles incl. reauth/rescope, init, agenda, doctor, migrate, preflight, setup) + shared `onboard` core + preflight exit-code namespace.
-- `skill/AGENTS.md` — bundled, self-improving AI skill teaching agents to drive `gwcli`; owns `SKILL.md`, `references/`, `scripts/`, `bin/`.
+  - `src/commands/AGENTS.md` — native mgws commands (profiles incl. reauth/rescope, init, agenda, doctor, migrate, preflight, setup) + shared `onboard` core + preflight exit-code namespace.
+- `multi-gws/AGENTS.md` — bundled, self-improving AI skill teaching agents to drive `mgws`; owns `SKILL.md`, `references/`, `scripts/`, `bin/`.
 
 Not indexed (transient/tooling): `dist/` (build output), `node_modules/`, `.github/workflows/`, `plans/`, `.omo/`, `.sisyphus/`, `.codegraph/`.

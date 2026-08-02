@@ -42,7 +42,7 @@ export interface OpenInBrowserOptions {
  * Why this matters:
  *   On Edge/Chrome/Brave/Vivaldi, `--inprivate`/`--incognito` alone joins an
  *   *existing* private session if one is already open. Two consecutive
- *   `gwcli profiles auth` invocations with `--inprivate` would land in the
+ *   `mgws profiles auth` invocations with `--inprivate` would land in the
  *   same private window, where the previous account is still signed in →
  *   Google auto-completes consent against the wrong account. Pairing with
  *   `--user-data-dir=<unique-tmp>` forces an isolated browser process per
@@ -114,7 +114,7 @@ const LINUX_EXE_TO_SPEC: Array<[string, BrowserSpec]> = [
  */
 export function buildIsolationArgs(family: BrowserFamily): string[] {
   if (family !== 'chromium') return [];
-  const userDataDir = mkdtempSync(join(tmpdir(), 'gwcli-oauth-'));
+  const userDataDir = mkdtempSync(join(tmpdir(), 'mgws-oauth-'));
   return [
     `--user-data-dir=${userDataDir}`,
     '--no-first-run',
@@ -326,7 +326,7 @@ export function openInBrowser(url: string, options: OpenInBrowserOptions = {}): 
 
   if (options.incognito && !isIncognito) {
     process.stderr.write(
-      'gwcli: could not detect a known incognito-capable default browser. ' +
+      'mgws: could not detect a known incognito-capable default browser. ' +
         'Opening in default browser instead.\n' +
         'If the wrong Google account is auto-selected, copy the URL above and paste it into a private/incognito window.\n'
     );

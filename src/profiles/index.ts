@@ -12,7 +12,7 @@ import {
   listProfileNames,
   profileExists,
 } from './config.js';
-import { GwcliError, type ProfileMeta } from '../types/index.js';
+import { MgwsError, type ProfileMeta } from '../types/index.js';
 import { DEFAULT_SERVICES } from './scopes.js';
 
 // ─── Profile Add ─────────────────────────────────────────────────────────────
@@ -27,7 +27,7 @@ export interface AddProfileOptions {
 /**
  * Create a new profile directory structure. When `clientSecretPath` is given,
  * its client_secret.json is copied into the profile's gws config dir (custom
- * OAuth client). When omitted, the profile relies on gwcli's built-in Desktop
+ * OAuth client). When omitted, the profile relies on mgws's built-in Desktop
  * OAuth client injected at auth time (see gws/default-client.ts). Does NOT run
  * auth — caller must invoke gws auth login separately.
  */
@@ -35,10 +35,10 @@ export function addProfile(name: string, options: AddProfileOptions): ProfileMet
   validateProfileName(name);
 
   if (profileExists(name)) {
-    throw new GwcliError(
+    throw new MgwsError(
       `Profile '${name}' already exists.`,
       'PROFILE_EXISTS',
-      `Use a different name or remove it first: gwcli profiles remove ${name}`
+      `Use a different name or remove it first: mgws profiles remove ${name}`
     );
   }
 
@@ -48,7 +48,7 @@ export function addProfile(name: string, options: AddProfileOptions): ProfileMet
   if (options.clientSecretPath !== undefined) {
     const clientPath = resolve(options.clientSecretPath);
     if (!existsSync(clientPath)) {
-      throw new GwcliError(
+      throw new MgwsError(
         `Client secret file not found: ${clientPath}`,
         'CLIENT_SECRET_NOT_FOUND',
         'Download your OAuth client JSON from the Google Cloud Console.'
@@ -91,10 +91,10 @@ export function removeProfile(name: string): void {
   validateProfileName(name);
 
   if (!profileExists(name)) {
-    throw new GwcliError(
+    throw new MgwsError(
       `Profile '${name}' does not exist.`,
       'PROFILE_NOT_FOUND',
-      `Available profiles: gwcli profiles list`
+      `Available profiles: mgws profiles list`
     );
   }
 
@@ -138,7 +138,7 @@ export function listAllProfiles(options: ListProfilesOptions = {}): ProfileListE
 
     let email = meta?.email ?? null;
 
-    // Lazy backfill: opt-in (off by default — `gwcli profiles list` shouldn't
+    // Lazy backfill: opt-in (off by default — `mgws profiles list` shouldn't
     // make N network calls). Callers like `profiles status` request it
     // explicitly when accuracy matters.
     if (!email && hasCredentials && options.backfillEmail) {
@@ -168,14 +168,14 @@ export function renameProfile(oldName: string, newName: string): void {
   validateProfileName(newName);
 
   if (!profileExists(oldName)) {
-    throw new GwcliError(
+    throw new MgwsError(
       `Profile '${oldName}' does not exist.`,
       'PROFILE_NOT_FOUND'
     );
   }
 
   if (profileExists(newName)) {
-    throw new GwcliError(
+    throw new MgwsError(
       `Profile '${newName}' already exists.`,
       'PROFILE_EXISTS',
       `Choose a different name.`
@@ -205,10 +205,10 @@ export function renameProfile(oldName: string, newName: string): void {
 
 export function setDefaultProfile(name: string): void {
   if (!profileExists(name)) {
-    throw new GwcliError(
+    throw new MgwsError(
       `Profile '${name}' does not exist.`,
       'PROFILE_NOT_FOUND',
-      `Available profiles: gwcli profiles list`
+      `Available profiles: mgws profiles list`
     );
   }
 

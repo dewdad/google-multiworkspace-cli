@@ -505,7 +505,7 @@ describe('buildIsolationArgs', () => {
     expect(dirA).toBeDefined();
     expect(dirB).toBeDefined();
     // CRITICAL: each launch must get a fresh dir, otherwise two consecutive
-    // `gwcli profiles auth` invocations would share session state and Google
+    // `mgws profiles auth` invocations would share session state and Google
     // would auto-complete consent against the previously-signed-in account.
     expect(dirA).not.toBe(dirB);
     expect(a).toContain('--no-first-run');
