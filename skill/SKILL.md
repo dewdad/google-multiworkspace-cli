@@ -120,27 +120,33 @@ gwcli profiles list --format json
 If no profiles or user requests a new account:
 
 1. **Ask the user** for: account nickname (e.g. `work`, `personal`) and which services they need
-2. A custom OAuth client secret JSON is **optional** — `gwcli` ships a built-in Desktop client, so `profiles add` works with no `--client`. Provide `--client <path>` only to use your own / verified OAuth app — see `@references/oauth-bootstrap.md` (Google deprecated post-creation secret retrieval; one-shot capture).
-3. Run (omit `--scopes` to grant the default mainstream Workspace services; omit `--client` to use the built-in client):
+2. A custom OAuth client secret JSON is **optional** — `gwcli` ships a built-in Desktop client, so onboarding works with no `--client`. Provide `--client <path>` only to use your own / verified OAuth app — see `@references/oauth-bootstrap.md` (Google deprecated post-creation secret retrieval; one-shot capture).
+3. **Preferred one-step path — `gwcli init`.** It ensures `gws` is installed, creates the profile, authenticates, and auto-sets it as default when it's the first. It is non-interactive in a non-TTY (agent/CI): pass a name and flags; it never hangs on a prompt. Add `--json` for a machine-readable summary.
+```bash
+# One command: ensure gws → create profile → authenticate → set default (built-in client, default services)
+gwcli init <name>
+
+# Non-interactive with an explicit scope set + JSON summary (agent/CI)
+gwcli init <name> --scopes gmail,calendar,drive --json --yes
+
+# Your own OAuth client / full access
+gwcli init <name> --client <path-to-client-secret.json>
+gwcli init <name> --full
+```
+   Equivalent lower-level path if `gws` is already installed (`profiles add` skips the setup pre-check):
 ```bash
 # Default services (gmail, calendar, drive, docs, sheets, slides, tasks, keep, people, chat, meet, forms), built-in client
 gwcli profiles add <name>
-
-# Default services with your own OAuth client
-gwcli profiles add <name> --client <path-to-client-secret.json>
-
-# Restrict scopes — pick from the default set above, plus opt-in extras: classroom, admin-reports
-gwcli profiles add <name> --scopes gmail,calendar,drive
-
-# Grant ABSOLUTELY EVERYTHING (all scopes incl. Pub/Sub + Cloud Platform)
-gwcli profiles add <name> --full
+gwcli profiles add <name> --client <path-to-client-secret.json>   # your own OAuth client
+gwcli profiles add <name> --scopes gmail,calendar,drive           # restrict scopes (+ opt-in: classroom, admin-reports)
+gwcli profiles add <name> --full                                  # ALL scopes (incl. Pub/Sub + Cloud Platform)
 ```
 4. This opens a browser — the user authenticates. Tokens are stored locally.
-5. Set default if first profile: `gwcli profiles set-default <name>`
+5. **The first profile is auto-set as default** by both `init` and `profiles add`. Only run `gwcli profiles set-default <name>` to change the default later.
 
 > **⚠ Testing-mode scope limit.** An unverified OAuth app (consent screen in "Testing") is capped by Google at **~25 OAuth scopes**. Each service maps to several scopes, so the default set already sits near the ceiling and `--full` will almost always exceed it — consent then fails, most visibly on personal `@gmail.com` accounts. Fixes: narrow with `--scopes`, or get the OAuth app verified. See `@references/profiles.md`.
 
-> **Scopes are immutable on a profile.** To add a scope later, you must `profiles remove` then `profiles add` with the new scope set (or `--full`). `profiles auth` re-uses the existing scope set (including a stored `--full` grant).
+> **Scopes are immutable on a profile.** To change scopes later, use `gwcli profiles rescope <name> --add drive` (or `--remove`, `--set`, `--full`) — it removes + re-adds + re-auths in one step, preserving the display name and any custom OAuth client. `profiles auth` re-uses the existing scope set (including a stored `--full` grant) without changing it.
 
 **Profile selection priority:** `--profile` flag > `GWCLI_PROFILE` env > configured default.
 
@@ -225,14 +231,18 @@ gwcli forms forms get --params '{"formId":"<id>"}'
 
 ### Profile Management
 ```bash
+gwcli init <name>                         # one-step: ensure gws + add + auth + auto-default (built-in client)
 gwcli profiles list --format json
-gwcli profiles add <name> --client <path>                                # default mainstream services (12)
-gwcli profiles add <name> --client <path> --scopes gmail,calendar,drive  # restricted
-gwcli profiles add <name> --client <path> --full                         # ALL scopes (incl. Pub/Sub + Cloud Platform)
+gwcli profiles add <name>                                                # default mainstream services (12), built-in client
+gwcli profiles add <name> --client <path>                                # your own OAuth client
+gwcli profiles add <name> --scopes gmail,calendar,drive                  # restricted
+gwcli profiles add <name> --full                                         # ALL scopes (incl. Pub/Sub + Cloud Platform)
 gwcli profiles remove <name> --force      # --force is REQUIRED (non-interactive)
-gwcli profiles set-default <name>
+gwcli profiles set-default <name>         # first profile is auto-default; use this to change it
 gwcli profiles auth <name>                # re-authenticate (re-uses existing scopes; --full re-uses full grant)
 gwcli profiles auth <name> --full         # re-authenticate requesting ALL scopes
+gwcli profiles reauth                     # re-auth ALL profiles, serialized (add --stale-only to skip valid tokens)
+gwcli profiles rescope <name> --add drive # change scopes (remove + re-add + re-auth); also --remove/--set/--full
 gwcli profiles status --format json --strict   # exits 2 if ANY profile unauthenticated
 gwcli doctor                              # full health check
 gwcli migrate --client <path>             # migrate v1 profiles to v2 layout
@@ -418,13 +428,19 @@ Always check that field or run a smoke API call.
 ### Quick command for the user
 
 When several profiles need re-auth at once (token expiry often hits every
-profile on the same client simultaneously). List your profiles with
-`gwcli profiles list --format json`, then serialize the re-auth:
+profile on the same client simultaneously), use the native serial helper — it
+walks every profile (or only stale ones), re-using each profile's stored
+scopes so there is no picker:
+```bash
+gwcli profiles reauth               # re-auth ALL profiles, one at a time
+gwcli profiles reauth --stale-only  # skip profiles whose token is still valid
+# For each profile: grab the printed URL, drive the shared browser, log in; it advances to the next.
+```
+Equivalent manual loop if you need per-profile control:
 ```bash
 for p in profile-a profile-b profile-c; do   # your profile names
   echo "=== $p ==="
   gwcli profiles auth "$p"
-  # no picker — grab the printed URL, drive the shared browser, log in, repeat
 done
 ```
 

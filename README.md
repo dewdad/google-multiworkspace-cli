@@ -29,12 +29,15 @@ The official `gws` CLI is excellent but ships with a single global credential st
 # 1. Install gwcli (from GitHub — requires git on PATH; npm runs `tsc` automatically via the `prepare` script)
 npm install -g github:dewdad/multi-gws-cli
 
-# 2. Install gws + create config dirs (idempotent)
-gwcli setup
+# 2. One-step onboarding: install gws, create your first profile, authenticate, set as default.
+#    Uses gwcli's built-in OAuth client — no --client needed.
+gwcli init personal
 
 # 3. Verify
 gwcli doctor
 ```
+
+Prefer to do it in stages? `gwcli setup` installs `gws` + creates config dirs (idempotent), then `gwcli profiles add <name>` adds an account. `gwcli init` just chains the two with the setup pre-check baked in.
 
 > **Not on the npm registry yet.** `gwcli` is installed directly from this GitHub repo. npm will clone, run `prepare` (`tsc`) to build `dist/`, then symlink the `gwcli` bin globally. Standard `npm update -g` re-pulls the default branch.
 
@@ -55,21 +58,27 @@ You can reuse one OAuth client across multiple `gwcli` profiles, or create one p
 
 ### 2. Add a profile
 
+The built-in OAuth client means `--client` is **optional** — omit it to use gwcli's bundled Desktop client:
+
 ```bash
-gwcli profiles add personal --client ~/Downloads/client_secret_*.json
+gwcli init personal                                   # one step: create + authenticate + set default
+gwcli profiles add personal                           # same, if gws is already installed
+gwcli profiles add personal --client ~/Downloads/client_secret_*.json   # your own OAuth client
 ```
 
-This opens a browser for OAuth consent. Tokens are stored under `<config-root>/profiles/personal/gws/` (isolated from any other profile and from any pre-existing global `gws` install).
+This opens a browser for OAuth consent. Tokens are stored under `<config-root>/profiles/personal/gws/` (isolated from any other profile and from any pre-existing global `gws` install). **The first profile is auto-set as default.**
 
 By default all supported services are requested. To restrict scopes:
 
 ```bash
-gwcli profiles add work --client ~/work-client.json --scopes gmail,calendar,drive
+gwcli profiles add work --scopes gmail,calendar,drive
 ```
 
-> **Scopes are immutable on a profile.** To change the scope set, `profiles remove` then `profiles add` again.
+> **Scopes are immutable on a profile.** To change the scope set, use `gwcli profiles rescope <name> --add drive` (or `--remove`/`--set`/`--full`) — it removes + re-adds + re-auths in one step, preserving the display name and any custom OAuth client.
 
 ### 3. Set a default profile (optional)
+
+The first profile is already the default. Use this only to switch the default later:
 
 ```bash
 gwcli profiles set-default personal
@@ -83,15 +92,18 @@ Profile resolution order: `--profile <name>` flag → `GWCLI_PROFILE` env var �
 
 ### A) Native commands (handled by `gwcli` itself)
 
-| Command                    | Purpose                                                              |
-| -------------------------- | -------------------------------------------------------------------- |
-| `gwcli profiles <action>`  | `list`, `add`, `remove`, `rename`, `set-default`, `auth`, `status`   |
-| `gwcli agenda [--days N]`  | Profile-aware "what's on my calendar" shortcut                       |
-| `gwcli setup`              | Install `gws` + create config dirs                                   |
-| `gwcli preflight`          | Fast (<500ms) dependency check for agents (silent on success)        |
-| `gwcli doctor`             | Detailed system health report                                        |
-| `gwcli migrate`            | Migrate v1 profiles to the current layout                            |
-| `gwcli version-info`       | Show `gwcli` and `gws` versions                                      |
+| Command                    | Purpose                                                                         |
+| -------------------------- | ------------------------------------------------------------------------------- |
+| `gwcli init [name]`        | One-step onboarding: ensure `gws` + create profile + authenticate + auto-default |
+| `gwcli profiles <action>`  | `list`, `add`, `remove`, `rename`, `set-default`, `auth`, `status`, `reauth`, `rescope` |
+| `gwcli agenda [--days N]`  | Profile-aware "what's on my calendar" shortcut                                  |
+| `gwcli setup`              | Install `gws` + create config dirs                                              |
+| `gwcli preflight`          | Fast (<500ms) dependency check for agents (silent on success)                   |
+| `gwcli doctor`             | Detailed system health report                                                   |
+| `gwcli migrate`            | Migrate v1 profiles to the current layout                                       |
+| `gwcli version-info`       | Show `gwcli` and `gws` versions                                                 |
+
+`gwcli profiles reauth [--stale-only]` re-authenticates every profile (or only expired ones) serially. `gwcli profiles rescope <name> --add|--remove|--set|--full` changes a profile's scopes in one step (scopes are otherwise immutable).
 
 ### B) Passthrough to `gws`
 
@@ -200,7 +212,7 @@ gwcli drive files list --params '{"pageSize":20}' --format json
 | -------------------------------- | -------------------------------------------- | --------------------------------------------- |
 | `gws binary not found`           | `gws` not installed / not on PATH            | `gwcli setup`, or set `gwsBinary` in config   |
 | `preflight` exits `63`           | `gws` missing/outdated                       | `gwcli setup`                                 |
-| `preflight` exits `64`           | No profiles configured                       | `gwcli profiles add <name> --client <path>`   |
+| `preflight` exits `64`           | No profiles configured                       | `gwcli init <name>`                           |
 | `gwcli: command not found`       | `gwcli` not installed globally               | `npm install -g github:dewdad/multi-gws-cli` |
 | Auth errors during API call      | Profile token expired/revoked                | `gwcli profiles auth <name>`                  |
 | `keep …` → `403 PERMISSION_DENIED` | Personal `@gmail.com` (Keep API is Workspace-only) | Expected on consumer accounts. See [`skill/references/keep.md`](skill/references/keep.md#consumer-keep-alternatives-personal-gmailcom) for unofficial community alternatives |

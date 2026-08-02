@@ -38,7 +38,7 @@ export async function runDoctor(): Promise<void> {
       name: 'Profiles',
       status: 'warn',
       message: 'No profiles configured',
-      suggestion: 'Create one: gwcli profiles add <name> --client <path>',
+      suggestion: 'Create one: gwcli init <name>',
     });
   } else {
     for (const profile of profiles) {

@@ -102,7 +102,7 @@ When the user requests a durable behavior change, record it here or in the relev
 - `src/AGENTS.md` — TypeScript source contract: ESM `.js` imports, strict types, native-vs-passthrough routing, build/test/lint toolchain. Directly owns `index.ts`, `types/`, `lib/`, `compat/`, `version.ts`.
   - `src/profiles/AGENTS.md` — profile store, config path layout, resolution priority, scope vocabulary, name validation.
   - `src/gws/AGENTS.md` — external `gws` subprocess orchestration: binary discovery, env injection, auth login + OAuth browser launch, token-cache invalidation, error translation.
-  - `src/commands/AGENTS.md` — native gwcli commands (profiles, agenda, doctor, migrate, preflight, setup) + preflight exit-code namespace.
+  - `src/commands/AGENTS.md` — native gwcli commands (profiles incl. reauth/rescope, init, agenda, doctor, migrate, preflight, setup) + shared `onboard` core + preflight exit-code namespace.
 - `skill/AGENTS.md` — bundled, self-improving AI skill teaching agents to drive `gwcli`; owns `SKILL.md`, `references/`, `scripts/`, `bin/`.
 
 Not indexed (transient/tooling): `dist/` (build output), `node_modules/`, `.github/workflows/`, `plans/`, `.omo/`, `.sisyphus/`, `.codegraph/`.

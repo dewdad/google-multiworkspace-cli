@@ -11,7 +11,7 @@
 |------|-------|-----|
 | `0` | Ready | proceed |
 | `63` | `gws` binary missing or below minimum version | `gwcli setup` |
-| `64` | No profiles configured | `gwcli profiles add <name> --client <path>` |
+| `64` | No profiles configured | `gwcli init <name>` (or `gwcli profiles add <name>`) |
 | `127` (or shell "command not found") | `gwcli` itself not on PATH | `npm install -g github:dewdad/multi-gws-cli`, then `gwcli setup` |
 
 ## Runtime exit codes (gws API passthrough)
@@ -20,7 +20,7 @@
 |---------|-----------|-------|-----|
 | Auth error / "invalid_grant" | `2` | OAuth token expired or revoked | `gwcli profiles auth <profile>` |
 | General error / API failure | `1` | API error (quota, invalid request) | Read stderr from gws |
-| "insufficient_scope" | `1` | Missing API scope on this profile | Re-add profile with needed scopes (scopes are immutable) |
+| "insufficient_scope" | `1` | Missing API scope on this profile | `gwcli profiles rescope <name> --add <service>` (scopes are immutable; this re-adds + re-auths) |
 | "ECONNREFUSED" / network | `1` | Network issue | Check internet connectivity |
 | "rate limit" / HTTP 429 | `1` | API quota exceeded | Wait and retry, or reduce request rate |
 
@@ -60,12 +60,14 @@ gwcli --verbose gmail users messages list --params '{"userId":"me"}'
 ## Common Scenarios
 
 ### "Command works for one profile but not another"
-Different profiles may have different scopes. **Scopes are immutable on a profile** — `profiles auth` re-uses the existing scope set, so adding a scope requires recreating the profile.
+Different profiles may have different scopes. **Scopes are immutable on a profile** — `profiles auth` re-uses the existing scope set, so adding a scope requires recreating the profile. `profiles rescope` does the remove + re-add + re-auth in one step (preserving display name and any custom OAuth client):
 ```bash
 gwcli profiles list --format json
-# Inspect the `scopes` array, then:
-gwcli profiles remove <name> --force
-gwcli profiles add <name> --client <path> --scopes gmail,calendar,drive,docs
+# Inspect the `scopes` array, then add what's missing:
+gwcli profiles rescope <name> --add docs,sheets
+# Or replace the whole set / go full-access:
+gwcli profiles rescope <name> --set gmail,calendar,drive,docs
+gwcli profiles rescope <name> --full
 ```
 
 ### "Token expired after long inactivity"
@@ -108,7 +110,7 @@ When any command fails unexpectedly:
 
 1. `gwcli preflight --json` — fast environment diagnosis
 2. If `gws_missing` (exit 63) → `gwcli setup`
-3. If `no_profiles` (exit 64) → `gwcli profiles add <name> --client <path>`
+3. If `no_profiles` (exit 64) → `gwcli init <name>` (or `gwcli profiles add <name>`)
 4. If runtime auth error (exit 2) → `gwcli profiles auth <profile>`
 5. For a deeper view → `gwcli doctor`
 6. Found a real bug or doc inaccuracy? Edit the relevant skill file directly with your editing tools.

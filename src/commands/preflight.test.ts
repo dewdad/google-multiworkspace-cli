@@ -76,7 +76,7 @@ describe('runPreflight', () => {
     expect(payload).toEqual({
       ok: false,
       error: 'no_profiles',
-      fix: 'gwcli profiles add <name> --client <path>',
+      fix: 'gwcli init <name>',
     });
   });
 

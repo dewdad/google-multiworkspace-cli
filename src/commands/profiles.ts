@@ -1,10 +1,13 @@
 import { Command } from 'commander';
-import { addProfile, removeProfile, listAllProfiles, renameProfile, setDefaultProfile, refreshProfileEmail } from '../profiles/index.js';
+import { removeProfile, listAllProfiles, renameProfile, setDefaultProfile, refreshProfileEmail } from '../profiles/index.js';
 import { getProfileMeta } from '../profiles/config.js';
-import { DEFAULT_SERVICES, FULL_ACCESS_SENTINEL, isFullAccess } from '../profiles/scopes.js';
+import { DEFAULT_SERVICES, isFullAccess } from '../profiles/scopes.js';
 import { runGwsAuthLogin, runGwsAuthStatus } from '../gws/runner.js';
 import { findGwsBinary } from '../gws/binary.js';
 import { formatOutput } from '../lib/output.js';
+import { addAndAuthProfile, resolveScopeList } from './onboard.js';
+import { runReauth } from './reauth.js';
+import { runRescope } from './rescope.js';
 import { GwcliError } from '../types/index.js';
 
 export function registerProfilesCommands(program: Command): void {
@@ -69,61 +72,43 @@ export function registerProfilesCommands(program: Command): void {
         // Verify gws is available
         findGwsBinary();
 
-        // --full requests every scope and takes precedence over --scopes. We
-        // persist the sentinel (not a real service list) so `profiles auth`
-        // re-requests full access on re-authentication.
-        const fullAccess = options.full === true;
-        const scopes = fullAccess
-          ? [FULL_ACCESS_SENTINEL]
-          : options.scopes.split(',').map((s: string) => s.trim()).filter(Boolean);
-        addProfile(name, {
+        // --full requests every scope and takes precedence over --scopes. The
+        // full-access sentinel is persisted (not a real service list) so
+        // `profiles auth` re-requests full access on re-authentication.
+        const { scopes, fullAccess } = resolveScopeList({ full: options.full, scopes: options.scopes });
+
+        // Commander parses `--no-incognito`/`--no-open` as `false` and the
+        // implicit default as `true` — pass through verbatim so the runner
+        // defaults win when no flag is given.
+        const result = await addAndAuthProfile(name, {
           clientSecretPath: options.client,
           displayName: options.displayName,
           scopes,
+          fullAccess,
+          auth: options.auth !== false,
+          incognito: options.incognito as boolean,
+          autoOpen: options.open as boolean,
+          onCreated: () => {
+            console.log(`Profile '${name}' created.`);
+            if (fullAccess) {
+              console.log('Full-access mode: requesting ALL scopes (incl. Pub/Sub + Cloud Platform).');
+            }
+            if (options.auth !== false) {
+              console.log('Starting authentication...');
+            }
+          },
         });
 
-        console.log(`Profile '${name}' created.`);
-        if (fullAccess) {
-          console.log('Full-access mode: requesting ALL scopes (incl. Pub/Sub + Cloud Platform).');
-        }
-
-        if (options.auth !== false) {
-          console.log('Starting authentication...');
-          // Commander parses `--no-incognito` as `incognito: false` and the
-          // implicit default as `incognito: true` — pass through verbatim so
-          // the runner default (`true`) wins when no flag is given.
-          const result = await runGwsAuthLogin(name, scopes, {
-            incognito: options.incognito as boolean,
-            autoOpen: options.open as boolean,
-            fullAccess,
-          });
-          if (result.exitCode === 0) {
-            console.log(`Profile '${name}' authenticated successfully.`);
-            // Best-effort: resolve and persist the bound Google identity.
-            try {
-              const email = refreshProfileEmail(name);
-              if (email) {
-                console.log(`Identity: ${email}`);
-              }
-            } catch {
-              // Non-fatal — auth succeeded.
-            }
-          } else {
-            // Auth failed AFTER scaffolding — roll back to avoid leaving an
-            // orphaned profile directory that blocks retries with the same
-            // name (Issue 3).
-            console.error(`Authentication failed. Rolling back profile '${name}'.`);
-            try {
-              removeProfile(name);
-            } catch {
-              // Last-ditch: leave breadcrumbs so the user can clean up manually.
-              console.error(`(Could not auto-remove. Run: gwcli profiles remove ${name} --force)`);
-            }
-            console.error(`Re-run: gwcli profiles add ${name}`);
-            process.exit(result.exitCode || 1);
+        if (result.authenticated) {
+          console.log(`Profile '${name}' authenticated successfully.`);
+          if (result.email) {
+            console.log(`Identity: ${result.email}`);
           }
         } else {
           console.log(`Skipping auth. Run later: gwcli profiles auth ${name}`);
+        }
+        if (result.isDefault) {
+          console.log(`Set as the default profile.`);
         }
       } catch (err) {
         if (err instanceof GwcliError) {
@@ -364,5 +349,43 @@ export function registerProfilesCommands(program: Command): void {
         }
         process.exit(1);
       }
+    });
+
+  // ─── profiles reauth ─────────────────────────────────────────────────────
+
+  profiles
+    .command('reauth')
+    .description('Re-authenticate profiles serially (all, or only stale tokens with --stale-only)')
+    .option('--stale-only', 'Only re-authenticate profiles whose token is invalid/expired')
+    .option('--no-incognito', 'Open OAuth URLs in the default browser session instead of a private window')
+    .option('--no-open', 'Do not auto-launch a browser for the OAuth URLs (headless/agent/CI); print them instead')
+    .action(async (options) => {
+      await runReauth({
+        staleOnly: options.staleOnly === true,
+        incognito: options.incognito as boolean,
+        autoOpen: options.open as boolean,
+      });
+    });
+
+  // ─── profiles rescope ────────────────────────────────────────────────────
+
+  profiles
+    .command('rescope <name>')
+    .description('Change a profile\'s scopes (remove + re-add + re-auth). Preserves display name and custom OAuth client.')
+    .option('--add <list>', 'Comma-separated service names to add to the current set')
+    .option('--remove <list>', 'Comma-separated service names to remove from the current set')
+    .option('--set <list>', 'Replace the entire service set with this comma-separated list')
+    .option('--full', 'Switch the profile to full access (ALL scopes)')
+    .option('--no-incognito', 'Open the OAuth URL in the default browser session instead of a private window')
+    .option('--no-open', 'Do not auto-launch a browser for the OAuth URL (headless/agent/CI); print it instead')
+    .action(async (name: string, options) => {
+      await runRescope(name, {
+        add: options.add as string | undefined,
+        remove: options.remove as string | undefined,
+        set: options.set as string | undefined,
+        full: options.full === true,
+        incognito: options.incognito as boolean,
+        autoOpen: options.open as boolean,
+      });
     });
 }

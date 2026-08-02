@@ -9,6 +9,7 @@ import { runDoctor } from './commands/doctor.js';
 import { runMigrate } from './commands/migrate.js';
 import { runPreflight } from './commands/preflight.js';
 import { runSetup } from './commands/setup.js';
+import { runInit } from './commands/init.js';
 import { runAgenda } from './commands/agenda.js';
 import { tryTranslateCompat } from './compat/translations.js';
 import { GwcliError } from './types/index.js';
@@ -73,6 +74,34 @@ program
     await runSetup({ json: options.json, gwsVersion: options.gwsVersion });
   });
 
+program
+  .command('init [name]')
+  .description('One-step onboarding: ensure gws, create a profile, authenticate, set as default')
+  .option('--scopes <list>', 'Comma-separated service names (default: mainstream Workspace services)')
+  .option('--client <path>', 'Custom OAuth client JSON (optional — uses the built-in client if omitted)')
+  .option('--full', 'Request ALL scopes (incl. Pub/Sub + Cloud Platform)')
+  .option('--display-name <name>', 'Human-friendly display name')
+  .option('--no-auth', 'Scaffold the profile without authenticating')
+  .option('--no-incognito', 'Open the OAuth URL in the default browser session instead of a private window')
+  .option('--no-open', 'Do not auto-launch a browser for the OAuth URL (headless/agent/CI); print it instead')
+  .option('--gws-version <version>', 'Pin a specific gws version during install (default: latest)')
+  .option('--json', 'Emit a JSON summary')
+  .option('-y, --yes', 'Non-interactive: accept defaults, never prompt')
+  .action(async (name: string | undefined, options) => {
+    await runInit(name, {
+      scopes: options.scopes,
+      client: options.client,
+      full: options.full,
+      displayName: options.displayName,
+      auth: options.auth,
+      incognito: options.incognito,
+      open: options.open,
+      gwsVersion: options.gwsVersion,
+      json: options.json,
+      yes: options.yes,
+    });
+  });
+
 // `gwcli agenda` — native, profile-aware shortcut for "what's on my calendar?"
 // Implemented natively (composes events.list with timeMin/timeMax) so it works
 // regardless of whether the underlying gws supports a `+agenda` shortcut.
@@ -112,6 +141,7 @@ const NATIVE_COMMANDS = new Set([
   'migrate',
   'preflight',
   'setup',
+  'init',
   'agenda',
   'help',
 ]);

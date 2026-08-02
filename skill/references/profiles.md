@@ -54,8 +54,9 @@ gwcli profiles add proj-zikhron --client ./secret.json --display-name "Zikhron b
 ```
 
 Housekeeping tips:
-- Set the **most-used** profile as default (`gwcli profiles set-default <name>`)
-  so bare commands "just work"; pass `--profile` only for the exceptions.
+- The **first profile is auto-set as default** (by both `gwcli init` and
+  `gwcli profiles add`). Use `gwcli profiles set-default <name>` only to switch
+  the default to a different, most-used profile; pass `--profile` for exceptions.
 - `meta.json` records `email`, `scopes`, `lastUsed`, and a `tags[]` array. `tags`
   is currently populated by the CLI/metadata (there is **no `--tags` flag** on
   `add` as of gws 0.22.x) — treat it as read-only metadata for now, and rely on
@@ -77,14 +78,20 @@ Returns:
 ]
 ```
 
+### One-Step Onboarding (preferred)
+```bash
+gwcli init <name> [--scopes <list> | --full] [--client <path>] [--display-name "My Work"] [--json] [--yes]
+```
+`init` ensures `gws` is installed, creates the profile, authenticates, and auto-sets it as default when it's the first. It is **non-interactive in a non-TTY** (agent/CI): pass a name + flags and it never hangs on a prompt; in a real terminal it prompts for the name/services when omitted. `--json` emits a summary. It's idempotent — an existing profile is re-authed rather than recreated.
+
 ### Add a New Profile
 ```bash
-gwcli profiles add <name> --client <path-to-oauth-json> [--scopes <list> | --full] [--display-name "My Work"]
+gwcli profiles add <name> [--client <path-to-oauth-json>] [--scopes <list> | --full] [--display-name "My Work"]
 ```
 
-**Required**: OAuth client secret JSON from Google Cloud Console — see [`oauth-bootstrap.md`](oauth-bootstrap.md). Google's "Download JSON" modal is one-shot; capture the file in a real browser, not headless automation.
+**`--client` is optional.** `gwcli` ships a built-in Desktop OAuth client, so `profiles add <name>` works with no client file. Provide `--client <path>` only to use your own / verified OAuth app — see [`oauth-bootstrap.md`](oauth-bootstrap.md) (Google's "Download JSON" modal is one-shot; capture in a real browser, not headless automation). `profiles add` assumes `gws` is already installed; `gwcli init` bundles the setup pre-check.
 
-If the OAuth flow fails (timeout, browser closed, consent declined), `profiles add` rolls back automatically — the partial profile directory is removed so you can retry with the same name.
+If the OAuth flow fails (timeout, browser closed, consent declined), both `init` and `profiles add` roll back automatically — the partial profile directory is removed so you can retry with the same name.
 
 **Default scopes** (granted when `--scopes` is omitted) — mainstream Workspace user services:
 `gmail,calendar,drive,docs,sheets,slides,tasks,keep,people,chat,meet,forms`
@@ -94,17 +101,20 @@ If the OAuth flow fails (timeout, browser closed, consent declined), `profiles a
 **Full access** — `--full` requests EVERY scope (incl. Pub/Sub + Cloud Platform) via `gws auth login --full`. It overrides `--scopes`. The grant is stored so `profiles auth` re-requests it on re-auth.
 
 ```bash
-# All mainstream services (default)
-gwcli profiles add personal --client ~/client.json
+# All mainstream services (default), built-in client — no --client needed
+gwcli profiles add personal
 
 # Restricted set
-gwcli profiles add work --client ~/client.json --scopes gmail,calendar,drive
+gwcli profiles add work --scopes gmail,calendar,drive
 
 # Include an opt-in extra
-gwcli profiles add edu --client ~/client.json --scopes gmail,drive,classroom
+gwcli profiles add edu --scopes gmail,drive,classroom
 
 # Everything
-gwcli profiles add admin --client ~/client.json --full
+gwcli profiles add admin --full
+
+# Your own / verified OAuth client (optional)
+gwcli profiles add corp --client ~/client.json --scopes gmail,calendar
 ```
 
 > **⚠ Testing-mode scope limit.** Google caps consent for an **unverified** OAuth app (consent screen in "Testing") at **~25 OAuth scopes**. Each service maps to several scopes, so:
@@ -136,10 +146,12 @@ gwcli profiles set-default <name>
 gwcli profiles auth <name>                       # uses the profile's stored scopes
 gwcli profiles auth <name> --scopes gmail,calendar  # override (still subject to immutability rule below)
 gwcli profiles auth <name> --full                # re-authenticate requesting ALL scopes
+gwcli profiles reauth                            # re-auth ALL profiles, serialized
+gwcli profiles reauth --stale-only               # only profiles whose token is invalid/expired
 ```
-Opens browser for fresh OAuth flow. Use when tokens expire.
+Opens a browser for a fresh OAuth flow. Use when tokens expire. `profiles reauth` walks every profile one at a time (never in parallel — each auth grabs its own callback port + the shared browser window), re-using each profile's stored scopes so there's no picker; `--stale-only` probes `gws auth status` and skips profiles whose token is still valid.
 
-> **`profiles auth` reuses the existing scope set.** It does **not** prompt for new scopes. A profile created with `--full` stores a full-access sentinel and is automatically re-authenticated with `--full`. To change the scope set, you must `profiles remove --force` then `profiles add` with the new scope list (or `--full`).
+> **`profiles auth` reuses the existing scope set.** It does **not** prompt for new scopes. A profile created with `--full` stores a full-access sentinel and is automatically re-authenticated with `--full`. To **change** the scope set, use `gwcli profiles rescope <name> --add <svc>` (or `--remove`/`--set`/`--full`) — it removes + re-adds + re-auths in one step, preserving the display name and any custom OAuth client.
 
 > **Non-TTY behavior.** `profiles auth` always passes `--services` to the underlying gws so the interactive scope picker is bypassed. In CI / agent / `Start-Process`-style environments where stdin is not a TTY, the command refuses to run if no stored or `--scopes` value is available — it would otherwise hang forever waiting for keystrokes that never arrive.
 

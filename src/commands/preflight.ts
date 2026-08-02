@@ -46,7 +46,7 @@ export async function runPreflight(options: PreflightOptions = {}): Promise<void
   // 2. At least one profile
   const profiles = listProfileNames();
   if (profiles.length === 0) {
-    emit({ ok: false, error: 'no_profiles', fix: 'gwcli profiles add <name> --client <path>' });
+    emit({ ok: false, error: 'no_profiles', fix: 'gwcli init <name>' });
     process.exit(PREFLIGHT_EXIT.NO_PROFILES);
   }
 

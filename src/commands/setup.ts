@@ -17,6 +17,40 @@ interface SetupOptions {
 const GWS_PACKAGE = '@googleworkspace/cli';
 const MIN_GWS_VERSION = '0.20.0';
 
+export interface EnsureSetupResult {
+  success: boolean;
+  steps: SetupStep[];
+}
+
+/**
+ * Run the idempotent setup steps (verify gwcli, install/verify gws, create
+ * config dirs) WITHOUT emitting output or exiting the process.
+ *
+ * Extracted so orchestrators like `gwcli init` can guarantee gws is installed
+ * before adding a profile, then render their own summary. `runSetup` wraps this
+ * with human/JSON output and a process exit.
+ */
+export function ensureSetup(gwsVersion?: string): EnsureSetupResult {
+  const steps: SetupStep[] = [];
+
+  // 1. Verify gwcli is invokable (trivially true: we're it)
+  steps.push({ name: 'gwcli', status: 'ok', detail: 'present' });
+
+  // 2. Verify gws package exists on registry before attempting install
+  steps.push(verifyPackageAvailable(GWS_PACKAGE));
+
+  // 3. Install / verify gws
+  steps.push(installGws(gwsVersion));
+
+  // 4. Verify gws version meets minimum
+  steps.push(verifyGwsVersion());
+
+  // 5. Create config directory tree
+  steps.push(createConfigDirs());
+
+  return { success: steps.every(s => s.status !== 'error'), steps };
+}
+
 /**
  * Install gws and verify dependencies. Idempotent.
  *
@@ -27,24 +61,7 @@ const MIN_GWS_VERSION = '0.20.0';
  * rest (gws + config dirs).
  */
 export async function runSetup(options: SetupOptions = {}): Promise<void> {
-  const steps: SetupStep[] = [];
-
-  // 1. Verify gwcli is invokable (trivially true: we're it)
-  steps.push({ name: 'gwcli', status: 'ok', detail: 'present' });
-
-  // 2. Verify gws package exists on registry before attempting install
-  steps.push(verifyPackageAvailable(GWS_PACKAGE));
-
-  // 3. Install / verify gws
-  steps.push(installGws(options.gwsVersion));
-
-  // 4. Verify gws version meets minimum
-  steps.push(verifyGwsVersion());
-
-  // 5. Create config directory tree
-  steps.push(createConfigDirs());
-
-  const success = steps.every(s => s.status !== 'error');
+  const { success, steps } = ensureSetup(options.gwsVersion);
 
   if (options.json) {
     process.stdout.write(JSON.stringify({ success, steps }, null, 2) + '\n');
@@ -54,8 +71,10 @@ export async function runSetup(options: SetupOptions = {}): Promise<void> {
       process.stdout.write(`  ${icon} ${step.name}${step.detail ? ': ' + step.detail : ''}\n`);
     }
     if (success) {
-      process.stdout.write('\nSetup complete. Add your first profile:\n');
-      process.stdout.write('  gwcli profiles add <name> --client <oauth-client.json>\n');
+      process.stdout.write('\nSetup complete. Add your first Google account — the built-in OAuth client\n');
+      process.stdout.write('means no --client is needed:\n');
+      process.stdout.write('  gwcli init <name>            # one step: create profile + authenticate\n');
+      process.stdout.write('  gwcli profiles add <name>    # same, without the setup pre-check\n');
     } else {
       process.stdout.write('\nSetup failed. See errors above.\n');
     }

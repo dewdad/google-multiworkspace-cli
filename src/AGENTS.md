@@ -39,4 +39,4 @@ TypeScript source for `gwcli`, the multi-profile orchestration layer over the ex
 
 - `profiles/` — profile store, config layout, resolution priority, scope vocabulary, name validation.
 - `gws/` — external `gws` subprocess orchestration: binary discovery, auth login, browser launch, error translation.
-- `commands/` — native gwcli command implementations (profiles, agenda, doctor, migrate, preflight, setup).
+- `commands/` — native gwcli command implementations (profiles incl. reauth/rescope, init, agenda, doctor, migrate, preflight, setup) + the shared `onboard` core.
