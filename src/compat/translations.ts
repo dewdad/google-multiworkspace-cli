@@ -1,7 +1,7 @@
 /**
  * Backward-compatibility translation layer.
  *
- * Translates old gwcli v1 command syntax to equivalent gws commands.
+ * Translates old mgws v1 command syntax to equivalent gws commands.
  * Logs a deprecation warning when a translation is applied.
  *
  * Remove after 3 months or in v3.0.
@@ -42,7 +42,7 @@ const TRANSLATIONS: Record<string, Translation> = {
         '--fields', 'messages(id,threadId,snippet,labelIds,internalDate)',
       ];
     },
-    newSyntax: "gwcli gmail users messages list --params '{\"userId\":\"me\"}'",
+    newSyntax: "mgws gmail users messages list --params '{\"userId\":\"me\"}'",
   },
 
   'gmail read': {
@@ -54,22 +54,36 @@ const TRANSLATIONS: Record<string, Translation> = {
         '--params', JSON.stringify(params),
       ];
     },
-    newSyntax: "gwcli gmail users messages get --params '{\"userId\":\"me\",\"id\":\"<id>\"}'",
+    newSyntax: "mgws gmail users messages get --params '{\"userId\":\"me\",\"id\":\"<id>\"}'",
   },
 
   'calendar events': {
     translate: (args) => {
-      const days = extractFlag(args, '--days') ?? '7';
-      return ['calendar', '+agenda', '--days', days];
+      // v1's "calendar events --days N" was an agenda shortcut. gws has no
+      // `+agenda` command, so emit the same valid `calendar events list` window
+      // the native `mgws agenda` command uses (see commands/agenda.ts).
+      const days = Number(extractFlag(args, '--days') ?? '7');
+      const window = Number.isFinite(days) && days > 0 ? days : 7;
+      const now = new Date();
+      const end = new Date(now.getTime() + window * 24 * 60 * 60 * 1000);
+      const params = {
+        calendarId: 'primary',
+        timeMin: now.toISOString(),
+        timeMax: end.toISOString(),
+        singleEvents: true,
+        orderBy: 'startTime',
+        maxResults: 50,
+      };
+      return ['calendar', 'events', 'list', '--params', JSON.stringify(params)];
     },
-    newSyntax: 'gwcli calendar +agenda --days 7',
+    newSyntax: 'mgws agenda --days 7',
   },
 
   'calendar list': {
     translate: () => {
       return ['calendar', 'calendarList', 'list', '--params', '{}'];
     },
-    newSyntax: "gwcli calendar calendarList list --params '{}'",
+    newSyntax: "mgws calendar calendarList list --params '{}'",
   },
 
   'drive list': {
@@ -81,7 +95,7 @@ const TRANSLATIONS: Record<string, Translation> = {
         '--fields', 'files(id,name,mimeType,modifiedTime)',
       ];
     },
-    newSyntax: "gwcli drive files list --params '{\"pageSize\":20}'",
+    newSyntax: "mgws drive files list --params '{\"pageSize\":20}'",
   },
 
   'drive search': {
@@ -95,7 +109,7 @@ const TRANSLATIONS: Record<string, Translation> = {
         '--fields', 'files(id,name,mimeType,modifiedTime)',
       ];
     },
-    newSyntax: "gwcli drive files list --params '{\"q\":\"name contains term\",\"pageSize\":20}'",
+    newSyntax: "mgws drive files list --params '{\"q\":\"name contains term\",\"pageSize\":20}'",
   },
 };
 
@@ -131,7 +145,7 @@ export function tryTranslateCompat(gwsArgs: string[]): string[] | null {
 
   // Emit deprecation warning
   process.stderr.write(
-    `⚠ Deprecated syntax: 'gwcli ${key}' → use native gws syntax.\n` +
+    `⚠ Deprecated syntax: 'mgws ${key}' → use native gws syntax.\n` +
     `  New: ${translation.newSyntax}\n\n`
   );
 

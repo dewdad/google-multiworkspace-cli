@@ -31,10 +31,22 @@ describe('tryTranslateCompat', () => {
     expect(stderr).toHaveBeenCalled();
   });
 
-  it('translates v1 "calendar events --days 3" with no third positional', () => {
+  it('translates v1 "calendar events --days 3" to a valid gws events.list window', () => {
     const out = tryTranslateCompat(['calendar', 'events', '--days', '3']);
     expect(out).not.toBeNull();
-    expect(out).toEqual(['calendar', '+agenda', '--days', '3']);
+    expect(out!.slice(0, 4)).toEqual(['calendar', 'events', 'list', '--params']);
+    const params = JSON.parse(out![4]!) as {
+      calendarId: string;
+      timeMin: string;
+      timeMax: string;
+      singleEvents: boolean;
+      orderBy: string;
+    };
+    expect(params.calendarId).toBe('primary');
+    expect(params.singleEvents).toBe(true);
+    expect(params.orderBy).toBe('startTime');
+    const spanDays = (Date.parse(params.timeMax) - Date.parse(params.timeMin)) / 86_400_000;
+    expect(Math.round(spanDays)).toBe(3);
     expect(stderr).toHaveBeenCalled();
   });
 
