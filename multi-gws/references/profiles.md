@@ -122,6 +122,12 @@ mgws profiles add corp --client ~/client.json --scopes gmail,calendar
 > - adding `classroom`/`admin-reports` or using `--full` will typically **exceed 25 and fail consent** — most visibly on personal `@gmail.com` accounts.
 >
 > Remedies: narrow the request with `--scopes`, or get the OAuth app **verified** (or use an Internal Workspace app, which is exempt).
+>
+> **Preemptive walkthrough (built in).** When `add`/`init`/`rescope` detect a request that would exceed the cap **and** no `--client` was given, `mgws` stops *before* the doomed consent attempt:
+> - In an **interactive terminal** it walks you through creating a cap-exempt (Internal Workspace / verified) OAuth client and prompts for its `client_secret.json` path, then authenticates with it.
+> - In a **non-TTY** (agent/CI) it fails fast with `SCOPE_CAP_EXCEEDED` — re-run with `--client <path>` or a narrower `--scopes`.
+>
+> Setting `MGWS_CLIENT_ID` / `MGWS_CLIENT_SECRET` (org-wide client override) skips this gate. See [`oauth-bootstrap.md`](oauth-bootstrap.md#automatic-prompt-when-you-exceed-the-25-scope-cap).
 
 After creating, the CLI opens a browser for OAuth consent. The user must authenticate.
 

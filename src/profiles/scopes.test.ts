@@ -4,7 +4,9 @@ import {
   OPTIONAL_SERVICES,
   ALL_SERVICES,
   FULL_ACCESS_SENTINEL,
+  SCOPE_CAP,
   isFullAccess,
+  willExceedScopeCap,
 } from './scopes.js';
 
 describe('scopes vocabulary', () => {
@@ -52,5 +54,39 @@ describe('isFullAccess', () => {
     expect(isFullAccess(['gmail', 'drive'])).toBe(false);
     expect(isFullAccess([])).toBe(false);
     expect(isFullAccess(undefined)).toBe(false);
+  });
+});
+
+describe('willExceedScopeCap', () => {
+  it('exposes the ~25-scope testing-mode ceiling', () => {
+    expect(SCOPE_CAP).toBe(25);
+  });
+
+  it('is always true for full access', () => {
+    expect(willExceedScopeCap([FULL_ACCESS_SENTINEL], true)).toBe(true);
+    expect(willExceedScopeCap(undefined, true)).toBe(true);
+  });
+
+  it('is false for the default service set (sits just under the cap)', () => {
+    expect(willExceedScopeCap([...DEFAULT_SERVICES], false)).toBe(false);
+  });
+
+  it('is false for a narrowed set and empty/undefined input', () => {
+    expect(willExceedScopeCap(['gmail', 'calendar', 'drive'], false)).toBe(false);
+    expect(willExceedScopeCap([], false)).toBe(false);
+    expect(willExceedScopeCap(undefined, false)).toBe(false);
+  });
+
+  it('is true when a privileged opt-in service (classroom/admin-reports) is present', () => {
+    expect(willExceedScopeCap(['gmail', 'drive', 'classroom'], false)).toBe(true);
+    expect(willExceedScopeCap(['gmail', 'admin-reports'], false)).toBe(true);
+  });
+
+  it('is true when the set is larger than the default service set', () => {
+    expect(willExceedScopeCap([...DEFAULT_SERVICES, 'classroom'], false)).toBe(true);
+  });
+
+  it('ignores a stray full-access sentinel when counting a non-full set', () => {
+    expect(willExceedScopeCap([FULL_ACCESS_SENTINEL, 'gmail', 'drive'], false)).toBe(false);
   });
 });

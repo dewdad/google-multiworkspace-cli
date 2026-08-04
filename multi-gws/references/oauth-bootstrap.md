@@ -23,6 +23,31 @@ without rebuilding.
 > embedded in distributed code and cannot be kept private. `gcloud`, `gh`, and
 > the AWS SAM CLI all embed their client the same way.
 
+## Automatic prompt when you exceed the ~25-scope cap
+
+`mgws` now checks, **before** attempting consent, whether your requested scope
+set will exceed Google's ~25-scope limit for the built-in (unverified,
+testing-mode) OAuth client. This heuristic trips when you use `--full`, add a
+privileged opt-in service (`classroom` / `admin-reports`), or request more
+services than the default set — the built-in client cannot grant that many
+scopes, so consent would fail.
+
+When it trips (and you did **not** pass `--client`):
+
+- **Interactive terminal** — `mgws` prints guidance for creating a cap-exempt
+  OAuth client (an **Internal Workspace app** or a **verified** app) and prompts
+  you to paste the path to its downloaded `client_secret.json`. It then
+  authenticates with that client. Press Enter to cancel and narrow `--scopes`
+  instead.
+- **Non-interactive (agent / CI / `--json`)** — `mgws` never blocks on a prompt;
+  it fails fast with `SCOPE_CAP_EXCEEDED`, telling you to re-run with
+  `--client <path>` or a narrower `--scopes`.
+
+Set `MGWS_CLIENT_ID` / `MGWS_CLIENT_SECRET` to replace the built-in client
+org-wide — when set, `mgws` trusts your client and skips this gate entirely.
+
+The rest of this page is the step-by-step for creating that cap-exempt client.
+
 ## Advanced: bring your own OAuth client
 
 Use your own OAuth client when you want per-account quota isolation, an internal

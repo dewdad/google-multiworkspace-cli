@@ -9,7 +9,7 @@ Owns the on-disk profile store, active-profile resolution, profile CRUD, name va
 - `config.ts` — config path layout + read/write of `config.json`, `meta.json`, profile enumeration, auth-artifact detection.
 - `resolver.ts` — active-profile resolution (priority order + loading `ResolvedProfile`).
 - `index.ts` — profile CRUD (add/remove/rename/set-default/list) + `refreshProfileEmail`.
-- `scopes.ts` — service/scope vocabulary (`DEFAULT_SERVICES`, `OPTIONAL_SERVICES`, `--full` sentinel).
+- `scopes.ts` — service/scope vocabulary (`DEFAULT_SERVICES`, `OPTIONAL_SERVICES`, `--full` sentinel) + the `SCOPE_CAP` ceiling and `willExceedScopeCap()` heuristic gate predicate.
 - `validator.ts` — profile-name validation + sanitization.
 
 ## Local Contracts
@@ -21,7 +21,7 @@ Owns the on-disk profile store, active-profile resolution, profile CRUD, name va
 - **Resolution priority** (`resolver.ts` `resolveProfileName`): `--profile` flag → `MGWS_PROFILE` env → `config.defaultProfile` → throw `MgwsError('NO_PROFILE')`. `resolveProfile` additionally requires metadata + auth artifacts; `resolveProfileDir` is the lenient variant for auth-time commands.
 - **Profile names** (`validator.ts`): must match `^[a-z][a-z0-9-]{0,62}$`, must not be a reserved name (`default`, `all`, `config`, command names, …), must contain no path separators or `..`. Validated on every name-bearing code path before any filesystem access: `addProfile`, `removeProfile`, `renameProfile` (both old and new name), and `resolveProfileName` (all three resolution sources — flag, env var, config default). The NO_PROFILE throw path is exempt (no name to validate).
 - **Scope vocabulary is service names, not raw OAuth URLs** (`scopes.ts`). `DEFAULT_SERVICES` is the single source of truth for the default grant and is forwarded to `gws auth login --services <list>`. `--full` is stored as the `FULL_ACCESS_SENTINEL` (`*full*`) — deliberately not a valid gws service name; `isFullAccess()` reads it back on re-auth.
-- **Testing-mode ~25-scope ceiling.** Google caps unverified/testing-mode OAuth apps at ~25 scopes. `DEFAULT_SERVICES` already sits near the ceiling — do not widen it casually; `classroom`/`admin-reports` stay opt-in in `OPTIONAL_SERVICES`.
+- **Testing-mode ~25-scope ceiling.** Google caps unverified/testing-mode OAuth apps at ~25 scopes (`SCOPE_CAP`). `DEFAULT_SERVICES` already sits near the ceiling — do not widen it casually; `classroom`/`admin-reports` stay opt-in in `OPTIONAL_SERVICES`. `willExceedScopeCap(scopes, fullAccess)` is the pure heuristic gate (mgws only knows service names, not raw scope counts): true for `--full`, for any `OPTIONAL_SERVICES` present, or for a set larger than `DEFAULT_SERVICES`. The onboarding gate (`commands/onboard.ts`) uses it to route over-cap requests to a cap-exempt client.
 - **Scopes are immutable per profile** at the UX level (change = remove + re-add). The one server-driven mutation: `refreshProfileEmail` strips the `keep` scope from consumer `@gmail.com` profiles (Keep API is Workspace-gated, always 403).
 
 ## Verification

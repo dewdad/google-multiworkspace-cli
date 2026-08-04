@@ -36,6 +36,7 @@
 | `PROFILE_CORRUPTED` | Bad meta.json | `mgws profiles remove <name> --force` then re-add |
 | `INVALID_PROFILE_NAME` | Bad characters or reserved name | use `[a-z][a-z0-9-]{0,62}`, avoid reserved names |
 | `CLIENT_SECRET_NOT_FOUND` | OAuth JSON file missing | check the `--client <path>` value |
+| `SCOPE_CAP_EXCEEDED` | Requested scopes exceed the built-in client's ~25-scope testing-mode cap (`--full`, `classroom`/`admin-reports`, or more than the default set) and no `--client` was given | Re-run with `--client <path>` (Internal Workspace / verified OAuth client), a narrower `--scopes`, or set `MGWS_CLIENT_ID`/`MGWS_CLIENT_SECRET`. In an interactive terminal `mgws` instead walks you through creating the client. See [`oauth-bootstrap.md`](oauth-bootstrap.md) |
 
 ## Diagnostic Commands
 
@@ -69,6 +70,22 @@ mgws profiles rescope <name> --add docs,sheets
 mgws profiles rescope <name> --set gmail,calendar,drive,docs
 mgws profiles rescope <name> --full
 ```
+
+### "Onboarding fails with SCOPE_CAP_EXCEEDED"
+The requested scopes exceed the built-in (unverified, testing-mode) OAuth client's ~25-scope ceiling — triggered by `--full`, adding `classroom`/`admin-reports`, or requesting more than the default service set, when no `--client` was supplied. `mgws` stops **before** the doomed consent attempt.
+
+```bash
+# Option A — narrow the request so it fits the built-in client
+mgws profiles add <name> --scopes gmail,calendar,drive
+
+# Option B — use a cap-exempt client (Internal Workspace / verified app)
+mgws profiles add <name> --client ~/internal-client.json --full
+
+# Option C — org-wide: point the built-in client at your Internal app once
+export MGWS_CLIENT_ID=...; export MGWS_CLIENT_SECRET=...   # gate never trips
+mgws profiles add <name> --full
+```
+In an interactive terminal, `mgws` instead walks you through creating the client and prompts for its path. With `--json`, the error is emitted as `{"success":false,"error":"SCOPE_CAP_EXCEEDED",...}` on stdout. See [`oauth-bootstrap.md`](oauth-bootstrap.md).
 
 ### "Token expired after long inactivity"
 Google OAuth tokens expire. Simply re-authenticate:

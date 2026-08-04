@@ -5,7 +5,7 @@ import { DEFAULT_SERVICES, isFullAccess } from '../profiles/scopes.js';
 import { runGwsAuthLogin, runGwsAuthStatus } from '../gws/runner.js';
 import { findGwsBinary } from '../gws/binary.js';
 import { formatOutput } from '../lib/output.js';
-import { addAndAuthProfile, resolveScopeList } from './onboard.js';
+import { addAndAuthProfile, resolveScopeList, emitJsonError } from './onboard.js';
 import { runReauth } from './reauth.js';
 import { runRescope } from './rescope.js';
 import { MgwsError } from '../types/index.js';
@@ -67,7 +67,9 @@ export function registerProfilesCommands(program: Command): void {
     .option('--no-auth', 'Skip authentication after creating profile')
     .option('--no-incognito', 'Open OAuth URL in default browser session instead of a private/incognito window')
     .option('--no-open', 'Do not auto-launch a browser for the OAuth URL (headless/agent/CI); print it instead')
+    .option('--json', 'Emit a JSON summary (and a structured JSON error on failure) instead of human-readable prose')
     .action(async (name: string, options) => {
+      const emitJson = options.json === true;
       try {
         // Verify gws is available
         findGwsBinary();
@@ -89,6 +91,7 @@ export function registerProfilesCommands(program: Command): void {
           incognito: options.incognito as boolean,
           autoOpen: options.open as boolean,
           onCreated: () => {
+            if (emitJson) return;
             console.log(`Profile '${name}' created.`);
             if (fullAccess) {
               console.log('Full-access mode: requesting ALL scopes (incl. Pub/Sub + Cloud Platform).');
@@ -98,6 +101,24 @@ export function registerProfilesCommands(program: Command): void {
             }
           },
         });
+
+        if (emitJson) {
+          process.stdout.write(
+            JSON.stringify(
+              {
+                success: true,
+                profile: name,
+                created: true,
+                authenticated: result.authenticated,
+                email: result.email,
+                isDefault: result.isDefault,
+              },
+              null,
+              2
+            ) + '\n'
+          );
+          return;
+        }
 
         if (result.authenticated) {
           console.log(`Profile '${name}' authenticated successfully.`);
@@ -111,6 +132,12 @@ export function registerProfilesCommands(program: Command): void {
           console.log(`Set as the default profile.`);
         }
       } catch (err) {
+        if (emitJson && err instanceof MgwsError) {
+          // Structured error on stdout so agents route on the stable `error` code
+          // (e.g. SCOPE_CAP_EXCEEDED) instead of scraping stderr prose.
+          emitJsonError(err);
+          process.exit(1);
+        }
         if (err instanceof MgwsError) {
           console.error(`Error: ${err.message}`);
           if (err.suggestion) console.error(err.suggestion);

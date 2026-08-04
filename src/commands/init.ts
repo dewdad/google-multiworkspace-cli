@@ -1,6 +1,6 @@
 import { createInterface } from 'node:readline/promises';
 import { ensureSetup } from './setup.js';
-import { addAndAuthProfile, resolveScopeList } from './onboard.js';
+import { addAndAuthProfile, resolveScopeList, emitJsonError } from './onboard.js';
 import { profileExists, getProfileMeta, hasAuthArtifacts } from '../profiles/config.js';
 import { runGwsAuthLogin } from '../gws/runner.js';
 import { refreshProfileEmail } from '../profiles/index.js';
@@ -46,8 +46,24 @@ async function promptLine(question: string, fallback: string): Promise<string> {
  * profile (auto-set as default when it's the first). Agent-first — fully
  * flag/JSON driven and non-interactive by default in a non-TTY; falls back to
  * light prompts only in an interactive terminal without `--yes`/`--json`.
+ *
+ * In `--json` mode a failed `MgwsError` (e.g. `SCOPE_CAP_EXCEEDED`, `AUTH_FAILED`)
+ * is emitted as a structured JSON error on stdout so agents route deterministically;
+ * otherwise it propagates to the top-level stderr handler.
  */
 export async function runInit(nameArg: string | undefined, options: InitOptions = {}): Promise<void> {
+  try {
+    await runInitInner(nameArg, options);
+  } catch (err) {
+    if (options.json && err instanceof MgwsError) {
+      emitJsonError(err);
+      process.exit(1);
+    }
+    throw err;
+  }
+}
+
+async function runInitInner(nameArg: string | undefined, options: InitOptions = {}): Promise<void> {
   const interactive = !!process.stdin.isTTY && options.yes !== true && options.json !== true;
   const emit = (summary: InitSummary): void => {
     if (options.json) {

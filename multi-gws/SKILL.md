@@ -11,7 +11,7 @@ description: |
 argument-hint: "[service] [action] [--profile name] [--format json]"
 license: MIT
 metadata:
-  version: "2.4.0"
+  version: "2.5.0"
   tags: "google, workspace, gmail, calendar, drive, docs, sheets, slides, keep, tasks, people, contacts, chat, meet, forms, classroom, admin-reports, multi-account"
   requires-bins: "node, mgws"
   homepage: "https://github.com/dewdad/multi-gws"
@@ -145,7 +145,18 @@ mgws profiles add <name> --full                                  # ALL scopes (i
 4. This opens a browser — the user authenticates. Tokens are stored locally.
 5. **The first profile is auto-set as default** by both `init` and `profiles add`. Only run `mgws profiles set-default <name>` to change the default later.
 
-> **⚠ Testing-mode scope limit.** An unverified OAuth app (consent screen in "Testing") is capped by Google at **~25 OAuth scopes**. Each service maps to several scopes, so the default set already sits near the ceiling and `--full` will almost always exceed it — consent then fails, most visibly on personal `@gmail.com` accounts. Fixes: narrow with `--scopes`, or get the OAuth app verified. See `@references/profiles.md`.
+> **⚠ Testing-mode scope limit — pick the auth strategy BEFORE choosing scopes.** An unverified OAuth app (consent screen in "Testing") is capped by Google at **~25 OAuth scopes**. Each service maps to several scopes, so the built-in client can only safely grant roughly the default set; more than the default, any `classroom`/`admin-reports`, or `--full` will exceed the cap and consent fails. `mgws` now checks this **before** attempting consent (`willExceedScopeCap`) and gates accordingly. Route by account type:
+>
+> | Account | Broad / `--full` scopes? | Do this |
+> |---------|--------------------------|---------|
+> | Personal `@gmail.com` | not possible on the built-in client | keep to the default or a narrowed `--scopes`; **do not** use `--full` (consent will fail — the app can't be made Internal) |
+> | Workspace (managed domain) | yes | get an **Internal** OAuth client from the Workspace admin (cap-exempt) and pass `--client <path>`, **or** set `MGWS_CLIENT_ID`/`MGWS_CLIENT_SECRET` org-wide so the gate never trips for the whole agent fleet |
+>
+> What the gate does when an over-cap request has no `--client`:
+> - **Human at a real terminal** → interactive walkthrough: prints Internal-client setup steps and prompts for the `client_secret.json` path, then authenticates with it.
+> - **Agent / CI / `--json` (non-TTY)** → never blocks; fails fast with `SCOPE_CAP_EXCEEDED`. Recover by re-running with `--client <path>`, a narrower `--scopes`, or `MGWS_CLIENT_ID`/`MGWS_CLIENT_SECRET` set.
+>
+> See `@references/oauth-bootstrap.md` § "Automatic prompt when you exceed the ~25-scope cap" and `@references/profiles.md`.
 
 > **Scopes are immutable on a profile.** To change scopes later, use `mgws profiles rescope <name> --add drive` (or `--remove`, `--set`, `--full`) — it removes + re-adds + re-auths in one step, preserving the display name and any custom OAuth client. `profiles auth` re-uses the existing scope set (including a stored `--full` grant) without changing it.
 
@@ -262,7 +273,10 @@ On any command failure:
 1. Runtime exit `2` → auth expired → see "Re-authenticating expired tokens" below
 2. Runtime exit `1` → gws printed error to stderr, inspect it
 3. Preflight exit `63`/`64` → run `mgws setup` or add a profile (see Step 0)
-4. Run `mgws doctor` for systematic diagnosis
+4. Onboarding error `SCOPE_CAP_EXCEEDED` (from `init`/`profiles add`/`profiles rescope`) → the request exceeds the built-in client's ~25-scope cap. Re-run with `--client <path>` (an Internal Workspace / verified OAuth client), a narrower `--scopes`, or with `MGWS_CLIENT_ID`/`MGWS_CLIENT_SECRET` set. See "Account Setup" above.
+5. Run `mgws doctor` for systematic diagnosis
+
+> **Structured errors for agents.** `mgws init --json` and `mgws profiles add --json` emit any failure as a JSON object on **stdout** — `{ "success": false, "error": "<CODE>", "message": ..., "suggestion": ... }` — so you can branch on the stable `error` code (e.g. `SCOPE_CAP_EXCEEDED`, `AUTH_FAILED`) instead of scraping stderr prose.
 
 → Full reference: `@references/troubleshooting.md`
 

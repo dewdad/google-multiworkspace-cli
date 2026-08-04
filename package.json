@@ -1,6 +1,6 @@
 {
   "name": "multi-gws",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "description": "Multi-profile Google Workspace CLI — orchestration layer over gws. Installable as AI skill via skillshare.",
   "type": "module",
   "main": "dist/index.js",

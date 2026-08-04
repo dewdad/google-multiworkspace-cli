@@ -65,3 +65,39 @@ export const FULL_ACCESS_SENTINEL = '*full*';
 export function isFullAccess(scopes: readonly string[] | undefined): boolean {
   return !!scopes && scopes.includes(FULL_ACCESS_SENTINEL);
 }
+
+/**
+ * Google's approximate OAuth-scope ceiling for an **unverified** (consent screen
+ * in "Testing") app. Consent beyond this fails, so mgws uses it to decide when
+ * the built-in testing-mode client can't grant a requested scope set.
+ */
+export const SCOPE_CAP = 25;
+
+/**
+ * Heuristic: will this scope selection exceed the ~25-scope testing-mode cap?
+ *
+ * mgws only knows *service names*, not the raw OAuth scopes `gws` expands them
+ * into, so this is deliberately approximate (the user picked a heuristic over a
+ * fragile per-service scope-count table):
+ *
+ * - `--full` requests EVERY scope → always over the cap.
+ * - `classroom`/`admin-reports` (the {@link OPTIONAL_SERVICES}) pull in
+ *   privileged scope bundles that tip the already-near-ceiling default set over.
+ * - Each service maps to ~2 scopes and the 12-service {@link DEFAULT_SERVICES}
+ *   set already sits just under the cap, so any set *larger* than the default
+ *   will overflow it.
+ *
+ * Used by the onboarding gate to preemptively route over-cap requests to a
+ * cap-exempt (Internal Workspace / verified) OAuth client before the doomed
+ * consent attempt.
+ */
+export function willExceedScopeCap(
+  scopes: readonly string[] | undefined,
+  fullAccess: boolean
+): boolean {
+  if (fullAccess) return true;
+  if (!scopes) return false;
+  const services = scopes.filter(s => s !== FULL_ACCESS_SENTINEL);
+  if (services.some(s => (OPTIONAL_SERVICES as readonly string[]).includes(s))) return true;
+  return services.length > DEFAULT_SERVICES.length;
+}
