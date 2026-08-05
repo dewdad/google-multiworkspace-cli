@@ -150,7 +150,7 @@ mgws profiles add <name> --full                                  # ALL scopes (i
 > | Account | Broad / `--full` scopes? | Do this |
 > |---------|--------------------------|---------|
 > | Personal `@gmail.com` | not possible on the built-in client | keep to the default or a narrowed `--scopes`; **do not** use `--full` (consent will fail — the app can't be made Internal) |
-> | Workspace (managed domain) | yes | get an **Internal** OAuth client from the Workspace admin (cap-exempt) and pass `--client <path>`, **or** set `MGWS_CLIENT_ID`/`MGWS_CLIENT_SECRET` org-wide so the gate never trips for the whole agent fleet |
+> | Workspace (managed domain) | yes | use an existing **Internal** OAuth client via `--client <path>` or `MGWS_CLIENT_ID`/`MGWS_CLIENT_SECRET`; **if none exists yet, CREATE one** — the Internal app is cap-exempt and needs no verification. Automate its creation + `client_secret.json` capture over CDP with `@references/oauth-client-automation.md` (drives Edge/Chrome on a dedicated automation profile), then pass the captured path to `--client`. Do **not** fall back to the built-in client with `--full` — it will fail the cap |
 >
 > What the gate does when an over-cap request has no `--client`:
 > - **Human at a real terminal** → interactive walkthrough: prints Internal-client setup steps and prompts for the `client_secret.json` path, then authenticates with it.
@@ -273,7 +273,7 @@ On any command failure:
 1. Runtime exit `2` → auth expired → see "Re-authenticating expired tokens" below
 2. Runtime exit `1` → gws printed error to stderr, inspect it
 3. Preflight exit `63`/`64` → run `mgws setup` or add a profile (see Step 0)
-4. Onboarding error `SCOPE_CAP_EXCEEDED` (from `init`/`profiles add`/`profiles rescope`) → the request exceeds the built-in client's ~25-scope cap. Re-run with `--client <path>` (an Internal Workspace / verified OAuth client), a narrower `--scopes`, or with `MGWS_CLIENT_ID`/`MGWS_CLIENT_SECRET` set. See "Account Setup" above.
+4. Onboarding error `SCOPE_CAP_EXCEEDED` (from `init`/`profiles add`/`profiles rescope`) → the request exceeds the built-in client's ~25-scope cap. Re-run with `--client <path>` (an Internal Workspace / verified OAuth client), a narrower `--scopes`, or with `MGWS_CLIENT_ID`/`MGWS_CLIENT_SECRET` set. On a managed domain with **no Internal client yet**, create one (cap-exempt) and capture its `client_secret.json` over CDP via `@references/oauth-client-automation.md`, then pass that path to `--client`. See "Account Setup" above.
 5. Run `mgws doctor` for systematic diagnosis
 
 > **Structured errors for agents.** `mgws init --json` and `mgws profiles add --json` emit any failure as a JSON object on **stdout** — `{ "success": false, "error": "<CODE>", "message": ..., "suggestion": ... }` — so you can branch on the stable `error` code (e.g. `SCOPE_CAP_EXCEEDED`, `AUTH_FAILED`) instead of scraping stderr prose.
@@ -513,5 +513,6 @@ If you discover an inaccuracy in this skill (wrong command, missing flag, broken
 - **Task management**: Load `@references/tasks.md`
 - **First-time setup**: Load `@references/profiles.md`
 - **OAuth client creation**: Load `@references/oauth-bootstrap.md`
+- **Automated OAuth client creation (Workspace, CDP/Edge)**: Load `@references/oauth-client-automation.md`
 - **Debugging**: Load `@references/troubleshooting.md`
 - **Never load all references at once** — load only what's needed for the current task

@@ -48,6 +48,13 @@ org-wide — when set, `mgws` trusts your client and skips this gate entirely.
 
 The rest of this page is the step-by-step for creating that cap-exempt client.
 
+> **Automate it (Workspace).** On a managed domain you can create the cap-exempt
+> **Internal** client and capture its `client_secret.json` by driving Edge /
+> Chrome over CDP — no manual clicking of the download modal. See
+> [`oauth-client-automation.md`](oauth-client-automation.md). The manual steps
+> below remain the fallback (and the only path for personal accounts, which
+> can't use an Internal app).
+
 ## Advanced: bring your own OAuth client
 
 Use your own OAuth client when you want per-account quota isolation, an internal
@@ -85,7 +92,11 @@ This file is the `--client <path>` argument to `mgws profiles add`.
    billing on it later if you exceed free-tier API limits.
 
 3. **Configure the OAuth consent screen** (first time only):
-   - User type: **External** (Internal is Workspace-admin only).
+   - User type: **External** for personal accounts. On a **managed Workspace
+     domain, prefer Internal** — it is exempt from the ~25-scope testing cap and
+     needs no verification, so `--full` works. (Internal is Workspace-admin
+     only; see [`oauth-client-automation.md`](oauth-client-automation.md) to
+     create + capture it over CDP.)
    - Add yourself (and any other test users) under "Test users".
    - Scopes: leave the default; gws will request the scopes it needs at
      auth-login time. Adding scopes here is for the consent screen UX only.
@@ -157,8 +168,14 @@ events unless you explicitly hook them up:
 - **PowerShell `Start-Process` with redirected stdio:** doesn't render a real
   browser at all; the OAuth flow can't complete.
 
-The recommendation: do step 5 (capture the JSON) **manually in a real
-browser**, exactly once per Google account. Everything else can be scripted.
+The recommendation: either do step 5 (capture the JSON) **manually in a real
+browser** exactly once per account, **or** drive a real (non-headless) browser
+over **CDP** with `Browser.setDownloadBehavior` set — that hooks the download
+event correctly and captures the file reliably. The bundled
+[`oauth-client-automation.md`](oauth-client-automation.md) +
+`scripts/cdp_oauth_client.mjs` do exactly this (Edge/Chrome on a dedicated
+automation profile). The failures above are specific to **headless** spawns and
+libraries that never wire up the download event — not a fundamental block.
 
 ### Multi-account note
 
